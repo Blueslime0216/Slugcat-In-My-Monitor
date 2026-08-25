@@ -234,34 +234,37 @@ namespace RainWorldDesktopPet.Core
             while (steps < 3 && fixedTimeStep.ConsumeStep())
             {
                 Foods.StepPhysics(World);
-                if (!Slugcat.State.Conscious || Slugcat.State.Dead ||
-                    Slugcat.State.StunCounter > 0)
+                if (!Foods.ShouldSkipMushroomSimulation(simulationTick))
                 {
-                    mouse.ConsumeClick();
-                    mouseAttention.Suppress(now, mouse.Position, Graphics.Head.Position);
+                    if (!Slugcat.State.Conscious || Slugcat.State.Dead ||
+                        Slugcat.State.StunCounter > 0)
+                    {
+                        mouse.ConsumeClick();
+                        mouseAttention.Suppress(now, mouse.Position, Graphics.Head.Position);
+                    }
+                    else
+                    {
+                        mouseAttention.Update(now, mouse.Position, mouse.ConsumeClick(), Graphics.Head.Position);
+                    }
+                    VirtualInput input = Slugcat.IsGrabbed
+                        ? VirtualInput.Neutral
+                        : AI.Step(Slugcat, World, mouse, mouseAttention);
+                    VirtualInput foodInput;
+                    if (!Slugcat.IsGrabbed && Foods.TryProduceInput(Slugcat, Graphics,
+                        AI.Attention, out foodInput)) input = foodInput;
+                    Slugcat.Step(input, World, mouse.Position, mouse.Velocity);
+                    RecoverFromDesktopEscape();
+                    if (!Slugcat.State.Conscious || Slugcat.State.Dead ||
+                        Slugcat.State.StunCounter > 0)
+                        mouseAttention.Suppress(now, mouse.Position, Graphics.Head.Position);
+                    if (DebugEnabled)
+                        parityDiagnostics.ObserveSurfaceState(Slugcat, World, input, simulationTick);
+                    Graphics.Step(AI.Attention, AI.OriginalAttentionTarget,
+                        AI.MouseAttentionActive && Slugcat.State.Conscious &&
+                            !Slugcat.State.Dead && Slugcat.State.StunCounter < 1,
+                        World);
+                    Foods.StepInteraction(Slugcat, Graphics);
                 }
-                else
-                {
-                    mouseAttention.Update(now, mouse.Position, mouse.ConsumeClick(), Graphics.Head.Position);
-                }
-                VirtualInput input = Slugcat.IsGrabbed
-                    ? VirtualInput.Neutral
-                    : AI.Step(Slugcat, World, mouse, mouseAttention);
-                VirtualInput foodInput;
-                if (!Slugcat.IsGrabbed && Foods.TryProduceInput(Slugcat, Graphics,
-                    AI.Attention, out foodInput)) input = foodInput;
-                Slugcat.Step(input, World, mouse.Position, mouse.Velocity);
-                RecoverFromDesktopEscape();
-                if (!Slugcat.State.Conscious || Slugcat.State.Dead ||
-                    Slugcat.State.StunCounter > 0)
-                    mouseAttention.Suppress(now, mouse.Position, Graphics.Head.Position);
-                if (DebugEnabled)
-                    parityDiagnostics.ObserveSurfaceState(Slugcat, World, input, simulationTick);
-                Graphics.Step(AI.Attention, AI.OriginalAttentionTarget,
-                    AI.MouseAttentionActive && Slugcat.State.Conscious &&
-                        !Slugcat.State.Dead && Slugcat.State.StunCounter < 1,
-                    World);
-                Foods.StepInteraction(Slugcat, Graphics);
                 simulationTick++;
                 steps++;
             }
@@ -287,6 +290,11 @@ namespace RainWorldDesktopPet.Core
         public bool FeedEggBugEgg()
         {
             return Foods.TrySpawnEggBugEgg(Slugcat, World);
+        }
+
+        public bool FeedFood(DesktopFoodKind kind)
+        {
+            return Foods.TrySpawnFood(kind, Slugcat, World);
         }
 
         public void ClearFoods()

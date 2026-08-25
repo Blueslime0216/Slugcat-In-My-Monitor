@@ -81,6 +81,12 @@ namespace RainWorldDesktopPet.Tests
                 EggBugEggPreservesOriginalEdibleContract);
             Run("Food palettes preserve Dangle Fruit layers and normal Eggbug hue",
                 FoodPalettesMatchOriginalColorRules);
+            Run("Four added foods preserve original edible and physics contracts",
+                AddedFoodsPreserveOriginalContracts);
+            Run("Added food palettes retain their original color families",
+                AddedFoodPalettesMatchOriginalColorRules);
+            Run("Mushroom applies an eight-second pet-only slowdown",
+                MushroomAppliesPetSlowdown);
             Run("Food interaction seeks, reserves, and consumes through VirtualInput",
                 FoodInteractionUsesVirtualInputAndConsumes);
             Run("Food offers use a farther randomized drop distance",
@@ -403,19 +409,30 @@ namespace RainWorldDesktopPet.Tests
             RainWorldAtlasSet set = loader.TryLoadPlayerAtlas();
             if (set == null) throw new InvalidOperationException(
                 "Rain World food atlas was not loaded.");
-            Bitmap bitmap = new Bitmap(640, 220, PixelFormat.Format32bppPArgb);
+            Bitmap bitmap = new Bitmap(800, 300, PixelFormat.Format32bppPArgb);
             try
             {
                 DesktopFoodManager manager = new DesktopFoodManager(81723);
                 manager.TryAddDangleFruit(new Vec2(35.0, 55.0));
-                for (int i = 0; i < 4; i++)
-                    manager.TryAddEggBugEgg(new Vec2(75.0 + i * 40.0, 55.0));
+                manager.TryAddEggBugEgg(new Vec2(75.0, 55.0));
+                manager.TryAddFood(DesktopFoodKind.SlimeMold,
+                    new Vec2(115.0, 55.0));
+                DesktopFoodManager added = new DesktopFoodManager(91237);
+                added.TryAddFood(DesktopFoodKind.DandelionPeach,
+                    new Vec2(155.0, 55.0));
+                added.TryAddFood(DesktopFoodKind.GlowWeed,
+                    new Vec2(195.0, 55.0));
+                added.TryAddFood(DesktopFoodKind.Mushroom,
+                    new Vec2(235.0, 55.0));
                 using (SpriteRenderer renderer = new SpriteRenderer(set))
                 using (System.Drawing.Graphics drawing =
                     System.Drawing.Graphics.FromImage(bitmap))
                 {
                     drawing.Clear(Color.Transparent);
                     renderer.RenderFoods(drawing, manager,
+                        new RenderSpace(new Rectangle(0, 0, bitmap.Width,
+                            bitmap.Height)), 2.8, 1.0, false);
+                    renderer.RenderFoods(drawing, added,
                         new RenderSpace(new Rectangle(0, 0, bitmap.Width,
                             bitmap.Height)), 2.8, 1.0, false);
                 }
@@ -558,6 +575,111 @@ namespace RainWorldDesktopPet.Tests
             True(egg.DetailColor.R > egg.DetailColor.G * 4 &&
                 egg.DetailColor.R > egg.DetailColor.B * 3,
                 "a representative normal egg keeps its warm red-pink detail");
+        }
+
+        private static void AddedFoodsPreserveOriginalContracts()
+        {
+            DesktopFood slime = new DesktopFood(DesktopFoodKind.SlimeMold,
+                Vec2.Zero, 0.0, 0.5);
+            Equal(3, slime.InitialBites, "Slime Mold has three bites");
+            Equal(1, slime.FoodPoints, "Slime Mold grants one food point");
+            Near(5.0, slime.Chunk.Radius, 0.000001,
+                "Slime Mold keeps radius 5");
+            Near(0.12, slime.Chunk.Mass, 0.000001,
+                "Slime Mold keeps mass 0.12");
+            True(slime.DecorationCount >= 8 && slime.DecorationCount <= 14,
+                "Slime Mold has the original 8..14 decorations");
+
+            DesktopFood peach = new DesktopFood(DesktopFoodKind.DandelionPeach,
+                Vec2.Zero, 0.0, 0.5);
+            Equal(3, peach.InitialBites, "Dandelion Peach has three bites");
+            Equal(1, peach.FoodPoints, "Dandelion Peach grants one food point");
+            Near(5.5, peach.Chunk.Radius, 0.000001,
+                "Dandelion Peach keeps radius 5.5");
+            Near(0.34, peach.Chunk.Mass, 0.000001,
+                "Dandelion Peach keeps mass 0.34");
+            Near(0.3, peach.Definition.Gravity, 0.000001,
+                "Dandelion Peach keeps slow gravity 0.3");
+            Near(0.95, peach.Definition.SurfaceFriction, 0.000001,
+                "Dandelion Peach keeps surface friction 0.95");
+            True(peach.DecorationCount >= 5 && peach.DecorationCount <= 7,
+                "Dandelion Peach has the original 5..7 puffs");
+
+            DesktopFood glow = new DesktopFood(DesktopFoodKind.GlowWeed,
+                Vec2.Zero, 0.0, 0.5);
+            Equal(3, glow.InitialBites, "Glow Weed has three bites");
+            Equal(1, glow.FoodPoints, "Glow Weed grants one food point");
+            Near(8.0, glow.Chunk.Radius, 0.000001,
+                "Glow Weed keeps radius 8");
+            Near(0.2, glow.Chunk.Mass, 0.000001,
+                "Glow Weed keeps mass 0.2");
+
+            DesktopFood mushroom = new DesktopFood(DesktopFoodKind.Mushroom,
+                Vec2.Zero, 0.5, 0.5);
+            Equal(1, mushroom.InitialBites, "Mushroom has one bite");
+            Equal(0, mushroom.FoodPoints, "Mushroom grants no food point");
+            Near(2.0, mushroom.Chunk.Radius, 0.000001,
+                "Mushroom keeps radius 2");
+            Near(0.05, mushroom.Chunk.Mass, 0.000001,
+                "Mushroom keeps mass 0.05");
+            Equal(320, mushroom.Definition.EffectDurationTicks,
+                "Mushroom effect keeps the original 320 update duration");
+        }
+
+        private static void AddedFoodPalettesMatchOriginalColorRules()
+        {
+            FoodLayerPalette slime = FoodRenderPalette.SlimeMold;
+            True(slime.PrimaryColor.R > slime.PrimaryColor.G &&
+                slime.PrimaryColor.G > slime.PrimaryColor.B,
+                "Slime Mold remains warm orange-brown");
+            FoodLayerPalette peach = FoodRenderPalette.DandelionPeach;
+            True(peach.BaseColor.B > peach.BaseColor.R &&
+                peach.BaseColor.B > peach.BaseColor.G,
+                "Dandelion Peach remains pale blue");
+            FoodLayerPalette glow = FoodRenderPalette.GlowWeed;
+            True(glow.PrimaryColor.G > 230 && glow.PrimaryColor.R > 170 &&
+                glow.PrimaryColor.B < 140,
+                "Glow Weed remains yellow-green");
+            FoodLayerPalette mushroom = FoodRenderPalette.Mushroom(0.5);
+            True(mushroom.PrimaryColor.R == 80 &&
+                mushroom.PrimaryColor.G == 76 && mushroom.PrimaryColor.B == 88,
+                "Mushroom cap follows the desktop fog palette");
+        }
+
+        private static void MushroomAppliesPetSlowdown()
+        {
+            Slugcat slugcat = new Slugcat(new Vec2(100.0, 100.0));
+            SlugcatGraphics graphics = new SlugcatGraphics(slugcat);
+            DesktopFoodManager manager = new DesktopFoodManager(7219);
+            AttentionSystem attention = new AttentionSystem();
+            VirtualInput input;
+            slugcat.State.Grounded = true;
+            True(manager.TryAddFood(DesktopFoodKind.Mushroom,
+                slugcat.Center + new Vec2(8.0, 0.0)),
+                "a mushroom can be offered");
+            True(manager.TryProduceInput(slugcat, graphics, attention, out input),
+                "the mushroom can be picked up");
+            for (int tick = 0; tick < 40; tick++)
+                manager.StepInteraction(slugcat, graphics);
+            True(manager.MushroomEffectActive,
+                "eating a mushroom starts its effect");
+            Equal(320, manager.MushroomEffectTicksRemaining,
+                "the effect starts at 320 fixed ticks");
+            Equal(0, manager.FoodPointsEaten,
+                "the mushroom does not add a food pip");
+            Near(0.0, manager.Fullness, 0.000001,
+                "the mushroom does not fill the hunger meter");
+            int skipped = 0;
+            for (int tick = 0; tick < 30; tick++)
+                if (manager.ShouldSkipMushroomSimulation(tick)) skipped++;
+            Equal(10, skipped,
+                "the effect skips exactly one of every three pet updates");
+
+            DesktopCollisionWorld world = new DesktopCollisionWorld(
+                new WindowEnumerator());
+            manager.StepPhysics(world);
+            Equal(319, manager.MushroomEffectTicksRemaining,
+                "the timer advances in real fixed ticks");
         }
 
         private static void FoodAtlasRendersOriginalPalette(
