@@ -32,8 +32,14 @@ namespace RainWorldDesktopPet.Physics
             { "DangleFruit0B", "DangleFruit1B", "DangleFruit2B" };
         public const int DangleFruitInitialBites = 3;
         public const int DangleFruitFoodPoints = 1;
+        public const double DangleFruitRadius = 8.0;
+        public const double DangleFruitVisualReach = 13.0;
         public const int EggBugEggInitialBites = 2;
         public const int EggBugEggFoodPoints = 1;
+        public const double EggBugEggRadius = 4.6;
+        // Includes the flexible tail, whose final point extends about 22
+        // simulation units from the BodyChunk center.
+        public const double EggBugEggVisualReach = 23.0;
         public const int DefaultLifetimeTicks = 1200;
 
         private const double Gravity = 0.9;
@@ -50,9 +56,14 @@ namespace RainWorldDesktopPet.Physics
 
         public DesktopFood(DesktopFoodKind kind, Vec2 position, double visualHue)
         {
+            if (kind != DesktopFoodKind.DangleFruit &&
+                kind != DesktopFoodKind.EggBugEgg)
+                throw new ArgumentOutOfRangeException("kind", kind,
+                    "Unknown desktop food kind.");
             Kind = kind;
             bool egg = kind == DesktopFoodKind.EggBugEgg;
-            Chunk = new BodyChunk(0, position, egg ? 4.6 : 8.0, 0.2);
+            Chunk = new BodyChunk(0, position,
+                egg ? EggBugEggRadius : DangleFruitRadius, 0.2);
             State = DesktopFoodState.Free;
             InitialBites = egg ? EggBugEggInitialBites : DangleFruitInitialBites;
             BitesRemaining = InitialBites;
@@ -72,6 +83,14 @@ namespace RainWorldDesktopPet.Physics
         public int AgeTicks { get; private set; }
         public Vec2 Rotation { get { return rotation; } }
         public Vec2 LastRotation { get { return lastRotation; } }
+        public double VisualReach
+        {
+            get
+            {
+                return Kind == DesktopFoodKind.EggBugEgg
+                    ? EggBugEggVisualReach : DangleFruitVisualReach;
+            }
+        }
         public bool IsActive
         {
             get

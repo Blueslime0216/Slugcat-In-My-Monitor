@@ -505,7 +505,7 @@ namespace RainWorldDesktopPet.UI
                 DesktopFood food = loop.Foods.Foods[i];
                 if (!food.IsActive) continue;
                 Vec2 center = food.Chunk.RenderPosition(pose.TimeStacker) * scale;
-                double reach = (food.Chunk.Radius + 4.0) * scale;
+                double reach = food.VisualReach * scale;
                 content = RectangleF.Union(content, new RectangleF(
                     (float)(center.X - reach), (float)(center.Y - reach),
                     (float)(reach * 2.0), (float)(reach * 2.0)));

@@ -79,6 +79,14 @@ namespace RainWorldDesktopPet.Tests
                 DangleFruitPreservesOriginalEdibleContract);
             Run("Eggbug Egg preserves its two-bite layered edible contract",
                 EggBugEggPreservesOriginalEdibleContract);
+            Run("Food visual bounds include fruit body and Eggbug tail",
+                FoodVisualBoundsIncludeProceduralParts);
+            Run("Food manager clear resets every interaction flag",
+                FoodClearResetsInteractionState);
+            Run("Food fallback remains visible without a local atlas",
+                FoodFallbackRendersWithoutAtlas);
+            Run("Renderer color-resource caches remain bounded",
+                RendererColorResourceCachesRemainBounded);
             Run("Food palettes preserve Dangle Fruit layers and normal Eggbug hue",
                 FoodPalettesMatchOriginalColorRules);
             Run("Food interaction seeks, reserves, and consumes through VirtualInput",
@@ -520,6 +528,120 @@ namespace RainWorldDesktopPet.Tests
                 "the first bite switches to the original eaten layers");
             True(egg.Bite() && egg.State == DesktopFoodState.Consumed,
                 "the second bite consumes the egg");
+        }
+
+        private static void FoodVisualBoundsIncludeProceduralParts()
+        {
+            DesktopFood fruit = new DesktopFood(DesktopFoodKind.DangleFruit,
+                Vec2.Zero);
+            DesktopFood egg = new DesktopFood(DesktopFoodKind.EggBugEgg,
+                Vec2.Zero, 0.0);
+            Near(DesktopFood.DangleFruitVisualReach, fruit.VisualReach, 0.000001,
+                "Dangle Fruit exposes its complete atlas reach");
+            True(fruit.VisualReach > fruit.Chunk.Radius,
+                "fruit bounds include pixels beyond its collision radius");
+            Near(DesktopFood.EggBugEggVisualReach, egg.VisualReach, 0.000001,
+                "Eggbug Egg exposes its procedural tail reach");
+            True(egg.VisualReach >= 22.0 &&
+                egg.VisualReach > egg.Chunk.Radius * 4.0,
+                "egg bounds cannot clip the approximately 22-unit tail");
+
+            bool rejectedUnknownKind = false;
+            try
+            {
+                new DesktopFood((DesktopFoodKind)999, Vec2.Zero);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejectedUnknownKind = true;
+            }
+            True(rejectedUnknownKind,
+                "unknown food kinds fail explicitly instead of becoming fruit");
+        }
+
+        private static void FoodClearResetsInteractionState()
+        {
+            Slugcat slugcat = new Slugcat(new Vec2(100.0, 100.0));
+            SlugcatGraphics graphics = new SlugcatGraphics(slugcat);
+            DesktopFoodManager manager = new DesktopFoodManager(1193);
+            AttentionSystem attention = new AttentionSystem();
+            VirtualInput input;
+            slugcat.State.Grounded = true;
+            True(manager.TryAddDangleFruit(slugcat.Center + new Vec2(8.0, 0.0)),
+                "a fruit can be prepared for the clear-state test");
+            True(manager.TryProduceInput(slugcat, graphics, attention, out input),
+                "the fruit enters an interaction state");
+            manager.Clear();
+            Equal(0, manager.Foods.Count, "clear removes every food");
+            True(manager.Target == null,
+                "clear removes the reserved target");
+            True(manager.InteractionState == FoodInteractionState.None,
+                "clear resets the interaction state");
+            True(!manager.LastSpawnAccepted,
+                "clear cannot expose a stale accepted-spawn result");
+        }
+
+        private static void FoodFallbackRendersWithoutAtlas()
+        {
+            using (Bitmap bitmap = new Bitmap(260, 130,
+                PixelFormat.Format32bppPArgb))
+            using (SpriteRenderer renderer = new SpriteRenderer(null))
+            using (System.Drawing.Graphics drawing =
+                System.Drawing.Graphics.FromImage(bitmap))
+            {
+                DesktopFoodManager manager = new DesktopFoodManager(3187);
+                manager.TryAddDangleFruit(new Vec2(45.0, 45.0));
+                manager.TryAddEggBugEgg(new Vec2(90.0, 45.0));
+                drawing.Clear(Color.Transparent);
+                renderer.RenderFoods(drawing, manager,
+                    new RenderSpace(new Rectangle(0, 0, bitmap.Width,
+                        bitmap.Height)), 2.0, 1.0, false);
+                int visiblePixels = 0;
+                int fruitPixels = 0;
+                int eggPixels = 0;
+                for (int y = 0; y < bitmap.Height; y++)
+                {
+                    for (int x = 0; x < bitmap.Width; x++)
+                    {
+                        if (bitmap.GetPixel(x, y).A == 0) continue;
+                        visiblePixels++;
+                        if (x < 135) fruitPixels++;
+                        else eggPixels++;
+                    }
+                }
+                True(visiblePixels > 200 && fruitPixels > 100 && eggPixels > 50,
+                    "both foods keep complete procedural fallbacks");
+            }
+        }
+
+        private static void RendererColorResourceCachesRemainBounded()
+        {
+            using (SpriteRenderer renderer = new SpriteRenderer(null))
+            {
+                MethodInfo tintMethod = typeof(SpriteRenderer).GetMethod(
+                    "GetTintAttributes", BindingFlags.Instance | BindingFlags.NonPublic);
+                MethodInfo brushMethod = typeof(SpriteRenderer).GetMethod(
+                    "GetBodyBrush", BindingFlags.Instance | BindingFlags.NonPublic);
+                FieldInfo tintField = typeof(SpriteRenderer).GetField(
+                    "tintAttributes", BindingFlags.Instance | BindingFlags.NonPublic);
+                FieldInfo brushField = typeof(SpriteRenderer).GetField(
+                    "bodyBrushes", BindingFlags.Instance | BindingFlags.NonPublic);
+                True(tintMethod != null && brushMethod != null && tintField != null &&
+                    brushField != null, "renderer cache members remain testable");
+                for (int i = 0; i < 1100; i++)
+                {
+                    Color color = Color.FromArgb(255, i & 255, (i >> 8) & 255,
+                        (i * 17) & 255);
+                    tintMethod.Invoke(renderer, new object[] { color });
+                    brushMethod.Invoke(renderer, new object[] { color });
+                }
+                int tintCount = (int)tintField.GetValue(renderer).GetType().
+                    GetProperty("Count").GetValue(tintField.GetValue(renderer), null);
+                int brushCount = (int)brushField.GetValue(renderer).GetType().
+                    GetProperty("Count").GetValue(brushField.GetValue(renderer), null);
+                True(tintCount <= 1024 && brushCount <= 1024,
+                    "long-running hue variation cannot grow GDI caches without limit");
+            }
         }
 
         private static void FoodPalettesMatchOriginalColorRules()

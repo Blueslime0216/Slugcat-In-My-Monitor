@@ -1,7 +1,7 @@
 # 음식 업데이트 상세 보고서
 
-작성일: 2026-08-25  
-대상 브랜치: `feature/food-update`  
+작성일: 2026-08-25
+대상 브랜치: `feature/food-update`
 대상 fork: `Blueslime0216/Slugcat-In-My-Monitor`
 
 ## 1. 업데이트 결과
@@ -166,6 +166,10 @@
 - atlas image는 기존 `RainWorldAtlasSet` 캐시를 공유한다.
 - 음식 palette 계산은 작은 값 형식으로 반환하며 bitmap을 만들지 않는다.
 - 알벌레 꼬리 꼭짓점 배열과 색상 brush를 renderer가 재사용한다.
+- 알벌레 알의 procedural tail을 포함한 시각 반경 23을 합성 bounds에 사용해 가장자리 잘림을 방지한다.
+- 앞/뒤 두 음식 레이어 중 비어 있는 pass는 Matrix와 GraphicsState를 만들기 전에 종료한다.
+- 로컬 atlas가 없거나 일부 layer만 빠진 경우에도 각 layer별 procedural fallback으로 형태와 핵심 색을 유지한다.
+- 장시간 여러 hue를 생성해도 GDI `ImageAttributes`와 `SolidBrush` cache가 각각 1024개를 넘지 않게 정리한다.
 - element 이름은 정적 문자열 배열로 캐시한다.
 - 음식은 Slugcat당 5개, 전체 12개로 제한한다.
 - 먹지 않은 음식은 1200 ticks 후 제거한다.
@@ -194,6 +198,11 @@
 - 140–360px 무작위 생성 범위와 바닥 위 낙하 시작
 - 다섯 번 연속 제안에서 섭취와 거절이 모두 발생하는지 확인
 - 최대 포만감 제한과 90초당 1점 소화
+- 파란 열매 몸체와 알벌레 알 꼬리를 모두 포함하는 composition 시각 반경
+- 알려지지 않은 food kind가 파란 열매로 조용히 처리되지 않고 명시적으로 실패하는지 확인
+- 음식 치우기 후 target, interaction countdown, accepted 상태가 남지 않는지 확인
+- 로컬 atlas 전체가 없어도 두 음식 fallback이 모두 보이는지 bitmap으로 확인
+- 1,100개 색상을 연속 요청해도 GDI 색상 resource cache가 상한을 지키는지 확인
 
 검증 명령:
 
@@ -215,8 +224,13 @@
 - `f638d0f` — `feat: add Eggbug Eggs and appetite-driven feeding`
 - `4efd419` — `docs: record appetite update and fruit color issue`
 - `a26036c` — `fix: restore original food palette behavior`
+- `cb06092` — `docs: record food palette correction`
+- `c217fcb` — 신규 4종 보고서 변경 revert
+- `96d9b85` — 신규 4종 구현 revert
 
 각 커밋은 `origin/feature/food-update`에 순차적으로 push했다.
+
+신규 4종 실험은 사용자 검토 결과 채택하지 않아 두 revert 커밋으로 완전히 취소했다. 현재 PR의 파일 변경 결과에는 `SlimeMold`, `DandelionPeach`, `GlowWeed`, `Mushroom` 코드와 UI가 남아 있지 않으며, 지원 범위는 파란 열매와 알벌레 알 2종뿐이다.
 
 ## 9. 새 음식 추가 방법
 

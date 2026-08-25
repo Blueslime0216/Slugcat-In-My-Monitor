@@ -62,6 +62,7 @@ namespace RainWorldDesktopPet.Graphics
         private readonly Bitmap lightSourceShaderMask;
         private readonly Bitmap shockWaveShaderMask;
         private const int TailRasterSize = 128;
+        private const int ResourceCacheLimit = 1024;
         public const int OriginalTailMeshVertexCount = 15;
         public const int OriginalTailMeshTriangleCount = 13;
         private static readonly int[,] TailTriangles =
@@ -682,6 +683,12 @@ namespace RainWorldDesktopPet.Graphics
         {
             SolidBrush brush;
             if (bodyBrushes.TryGetValue(color.ToArgb(), out brush)) return brush;
+            if (bodyBrushes.Count >= ResourceCacheLimit)
+            {
+                foreach (KeyValuePair<int, SolidBrush> item in bodyBrushes)
+                    item.Value.Dispose();
+                bodyBrushes.Clear();
+            }
             brush = new SolidBrush(color);
             bodyBrushes[color.ToArgb()] = brush;
             return brush;
@@ -1116,6 +1123,22 @@ namespace RainWorldDesktopPet.Graphics
             double characterRenderScale, double interpolation, bool heldLayer)
         {
             if (foodManager == null || foodManager.Foods.Count == 0) return;
+            IList<DesktopFood> foods = foodManager.Foods;
+            bool hasFoodInLayer = false;
+            for (int i = 0; i < foods.Count; i++)
+            {
+                DesktopFood candidate = foods[i];
+                if (!candidate.IsActive) continue;
+                bool held = candidate.State == DesktopFoodState.Held ||
+                    candidate.State == DesktopFoodState.Biting;
+                if (held != heldLayer) continue;
+                hasFoodInLayer = true;
+                break;
+            }
+            // Rendering is called once behind and once in front of the
+            // Slugcat. Most frames have food in only one layer, so avoid a
+            // Matrix allocation and graphics state change for the empty pass.
+            if (!hasFoodInLayer) return;
             GraphicsState state = graphics.Save();
             try
             {
@@ -1127,9 +1150,9 @@ namespace RainWorldDesktopPet.Graphics
                     graphics.Transform = transform;
                 }
 
-                for (int i = 0; i < foodManager.Foods.Count; i++)
+                for (int i = 0; i < foods.Count; i++)
                 {
-                    DesktopFood food = foodManager.Foods[i];
+                    DesktopFood food = foods[i];
                     if (!food.IsActive) continue;
                     bool held = food.State == DesktopFoodState.Held ||
                         food.State == DesktopFoodState.Biting;
@@ -1153,17 +1176,16 @@ namespace RainWorldDesktopPet.Graphics
                         DrawElement(graphics, food.FrontElement, center, angle,
                             1.0, 1.0, 0.5, 0.5,
                             FoodRenderPalette.DangleFruit.BaseColor);
+                    else
+                        FillCachedCircle(graphics, center, 8.0,
+                            FoodRenderPalette.DangleFruit.BaseColor);
                     if (hasBack)
                         DrawElement(graphics, food.BackElement, center, angle,
                             1.0, 1.0, 0.5, 0.5,
                             FoodRenderPalette.DangleFruit.PrimaryColor);
-                    if (!hasFront && !hasBack)
-                    {
-                        FillCircle(graphics, center, 7.0,
+                    else
+                        FillCachedCircle(graphics, center, 6.5,
                             FoodRenderPalette.DangleFruit.PrimaryColor);
-                        FillCircle(graphics, center + new Vec2(-2.0, -2.0), 2.0,
-                            FoodRenderPalette.DangleFruit.BaseColor);
-                    }
                 }
             }
             finally
@@ -1194,19 +1216,20 @@ namespace RainWorldDesktopPet.Graphics
             if (hasShell)
                 DrawElement(graphics, food.FrontElement, center, angle,
                     scaleX, scaleY, 0.5, 0.3, palette.BaseColor);
+            else
+                FillCachedCircle(graphics, center, 5.4, palette.BaseColor);
             if (hasColor)
                 DrawElement(graphics, food.BackElement, center, angle,
                     scaleX, scaleY, 0.5, 0.3, palette.PrimaryColor);
+            else
+                FillCachedCircle(graphics, center, 4.1, palette.PrimaryColor);
             if (hasEye)
                 DrawElement(graphics, food.DetailElement, center, angle,
                     0.45 * swellFactor, 0.45 * swellFactor, 0.5,
                     food.SpriteFrame == 0 ? 0.7 : 0.4, palette.DetailColor);
-            if (!hasShell && !hasColor && !hasEye)
-            {
-                FillCircle(graphics, center, 5.0, palette.PrimaryColor);
-                FillCircle(graphics, center - direction * 2.0, 2.0,
+            else
+                FillCachedCircle(graphics, center - direction * 2.0, 1.8,
                     palette.DetailColor);
-            }
         }
 
         private void DrawEggBugTail(System.Drawing.Graphics graphics,
@@ -1233,6 +1256,14 @@ namespace RainWorldDesktopPet.Graphics
             graphics.FillPolygon(GetBodyBrush(color), eggTailPoints);
         }
 
+        private void FillCachedCircle(System.Drawing.Graphics graphics,
+            Vec2 center, double radius, Color color)
+        {
+            graphics.FillEllipse(GetBodyBrush(color),
+                (float)(center.X - radius), (float)(center.Y - radius),
+                (float)(radius * 2.0), (float)(radius * 2.0));
+        }
+
         private static DmsSpriteSide SelectTorsoSide(SlugcatPose pose)
         {
             if (pose.BodyMode == BodyModeIndex.Stand && pose.InputX != 0)
@@ -1246,6 +1277,13 @@ namespace RainWorldDesktopPet.Graphics
         {
             ImageAttributes attributes;
             if (tintAttributes.TryGetValue(tint.ToArgb(), out attributes)) return attributes;
+
+            if (tintAttributes.Count >= ResourceCacheLimit)
+            {
+                foreach (KeyValuePair<int, ImageAttributes> item in tintAttributes)
+                    item.Value.Dispose();
+                tintAttributes.Clear();
+            }
 
             attributes = CreateTintAttributes(tint);
             tintAttributes[tint.ToArgb()] = attributes;

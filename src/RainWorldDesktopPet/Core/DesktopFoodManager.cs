@@ -96,7 +96,8 @@ namespace RainWorldDesktopPet.Core
             RemoveInactive();
             if (foods.Count >= MaximumActiveFoods) return false;
 
-            double radius = kind == DesktopFoodKind.EggBugEgg ? 4.6 : 8.0;
+            double radius = kind == DesktopFoodKind.EggBugEgg
+                ? DesktopFood.EggBugEggRadius : DesktopFood.DangleFruitRadius;
             double minimumDistance = DesktopWorldTransform.ToSimulationLength(140.0);
             double maximumDistance = DesktopWorldTransform.ToSimulationLength(360.0);
             double distance = MathUtil.Lerp(minimumDistance, maximumDistance,
@@ -221,6 +222,13 @@ namespace RainWorldDesktopPet.Core
 
         public void StepInteraction(Slugcat slugcat, SlugcatGraphics graphics)
         {
+            if (slugcat == null || graphics == null)
+            {
+                target = null;
+                interactionCountdown = 0;
+                InteractionState = FoodInteractionState.None;
+                return;
+            }
             if (target == null || !target.IsActive) return;
             if (slugcat.IsGrabbed || !slugcat.State.Conscious || slugcat.State.Dead ||
                 slugcat.State.StunCounter > 0)
@@ -272,7 +280,9 @@ namespace RainWorldDesktopPet.Core
         {
             foods.Clear();
             target = null;
+            interactionCountdown = 0;
             InteractionState = FoodInteractionState.None;
+            LastSpawnAccepted = false;
             LastEvent = "Food_Clear";
         }
 
@@ -296,7 +306,8 @@ namespace RainWorldDesktopPet.Core
             if (target != null && (target.State == DesktopFoodState.Held ||
                 target.State == DesktopFoodState.Biting))
             {
-                Vec2 velocity = slugcat.BodyChunks[0].Velocity * 0.5;
+                Vec2 velocity = slugcat == null
+                    ? Vec2.Zero : slugcat.BodyChunks[0].Velocity * 0.5;
                 target.Drop(velocity);
                 LastEvent = FoodEventName(target, "Drop");
             }
@@ -307,12 +318,17 @@ namespace RainWorldDesktopPet.Core
 
         private void RemoveInactive()
         {
+            bool removedTarget = false;
             for (int i = foods.Count - 1; i >= 0; i--)
             {
                 if (foods[i].IsActive) continue;
-                if (ReferenceEquals(foods[i], target)) target = null;
+                if (ReferenceEquals(foods[i], target)) removedTarget = true;
                 foods.RemoveAt(i);
             }
+            if (!removedTarget) return;
+            target = null;
+            interactionCountdown = 0;
+            InteractionState = FoodInteractionState.None;
         }
 
         private static Vec2 MouthPosition(Slugcat slugcat, SlugcatGraphics graphics)
