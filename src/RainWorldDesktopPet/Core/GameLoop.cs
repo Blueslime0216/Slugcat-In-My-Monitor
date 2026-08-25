@@ -87,7 +87,7 @@ namespace RainWorldDesktopPet.Core
             int aiSeed = unchecked(Environment.TickCount * 397 ^
                 (spawnIndex + 1) * 7919);
             AI = new DesktopPetAI(aiSeed, spawnIndex);
-            Foods = new DesktopFoodManager();
+            Foods = new DesktopFoodManager(unchecked(aiSeed ^ 0x45A91));
             AI.Attention.SetTarget(AttentionKind.RandomPoint,
                 spawn + new Vec2(Slugcat.State.Facing * 60.0, -20.0));
             RainWorldAssetLoader assetLoader = new RainWorldAssetLoader(installation);
@@ -282,6 +282,11 @@ namespace RainWorldDesktopPet.Core
         public bool FeedDangleFruit()
         {
             return Foods.TrySpawnDangleFruit(Slugcat, World);
+        }
+
+        public bool FeedEggBugEgg()
+        {
+            return Foods.TrySpawnEggBugEgg(Slugcat, World);
         }
 
         public void ClearFoods()

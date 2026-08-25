@@ -62,8 +62,14 @@ namespace RainWorldDesktopPet.Tests
             Run("Desktop floor collision prevents tunneling", DesktopFloorCollision);
             Run("Dangle Fruit preserves the original three-bite edible contract",
                 DangleFruitPreservesOriginalEdibleContract);
+            Run("Eggbug Egg preserves its two-bite layered edible contract",
+                EggBugEggPreservesOriginalEdibleContract);
             Run("Food interaction seeks, reserves, and consumes through VirtualInput",
                 FoodInteractionUsesVirtualInputAndConsumes);
+            Run("Food offers use a farther randomized drop distance",
+                FoodSpawnUsesFarRandomizedDrop);
+            Run("Fullness prevents five consecutive guaranteed meals",
+                FullnessPreventsGuaranteedEating);
             Run("Each monitor contributes floor, taskbar, and exposed boundaries", MonitorTerrainTopologyIsExplicit);
             Run("Window-edge falls land on the first lower window", WindowEdgeFallLandsOnLowerWindow);
             Run("Window-edge falls with empty space land on monitor terrain", EmptyAreaFallLandsOnMonitorFloor);
@@ -427,6 +433,95 @@ namespace RainWorldDesktopPet.Tests
                 "the completed fruit grants its one original food point");
             True(manager.InteractionState == FoodInteractionState.None,
                 "the controller releases the consumed target");
+        }
+
+        private static void EggBugEggPreservesOriginalEdibleContract()
+        {
+            DesktopFood egg = new DesktopFood(DesktopFoodKind.EggBugEgg,
+                new Vec2(100.0, 80.0), 0.2);
+            Equal(2, egg.BitesRemaining, "EggBugEgg starts with two bites");
+            Equal(1, egg.FoodPoints, "EggBugEgg grants one food point");
+            Near(4.6, egg.Chunk.Radius, 0.000001,
+                "EggBugEgg applies the original default swell radius");
+            Near(0.2, egg.Chunk.Mass, 0.000001,
+                "EggBugEgg keeps its original mass");
+            True(egg.FrontElement == "DangleFruit0A" &&
+                egg.BackElement == "EggBugEggColor" &&
+                egg.DetailElement == "JetFishEyeA",
+                "the intact egg uses the original three sprite layers");
+            True(egg.Claim() && egg.PickUp(egg.Chunk.Position) && egg.BeginBiting(),
+                "the egg enters its bite sequence");
+            True(egg.Bite(), "the first egg bite succeeds");
+            True(egg.FrontElement == "DangleFruit1A" &&
+                egg.BackElement == "EggBugEggColorEaten",
+                "the first bite switches to the original eaten layers");
+            True(egg.Bite() && egg.State == DesktopFoodState.Consumed,
+                "the second bite consumes the egg");
+        }
+
+        private static void FoodSpawnUsesFarRandomizedDrop()
+        {
+            MonitorInfo monitor = new MonitorInfo("FOOD-MONITOR",
+                new Rectangle(0, 0, 1920, 1080),
+                new Rectangle(0, 0, 1920, 1040), true);
+            DesktopCollisionWorld world = CreateSyntheticWorld(
+                new[] { monitor }, new DesktopWindowSnapshot[0]);
+            Slugcat slugcat = new Slugcat(DesktopWorldTransform.ToSimulation(
+                new Vec2(960.0, 1000.0)));
+            DesktopFoodManager manager = new DesktopFoodManager(4419);
+            True(manager.TrySpawnEggBugEgg(slugcat, world),
+                "an egg can spawn on monitor terrain");
+            DesktopFood food = manager.Foods[0];
+            double desktopDistance = Math.Abs(
+                DesktopWorldTransform.ToDesktop(food.Chunk.Position).X -
+                DesktopWorldTransform.ToDesktop(slugcat.Center).X);
+            True(desktopDistance >= 139.0 && desktopDistance <= 361.0,
+                "spawn distance stays in the 140-360 desktop pixel range: " +
+                desktopDistance.ToString("0.###"));
+            double floorY = monitor.FloorY;
+            double foodY = DesktopWorldTransform.ToDesktop(food.Chunk.Position).Y;
+            True(foodY < floorY - 40.0,
+                "food starts above the floor so it visibly drops");
+        }
+
+        private static void FullnessPreventsGuaranteedEating()
+        {
+            Slugcat slugcat = new Slugcat(new Vec2(100.0, 100.0));
+            slugcat.State.Grounded = true;
+            SlugcatGraphics graphics = new SlugcatGraphics(slugcat);
+            DesktopFoodManager manager = new DesktopFoodManager(9182);
+            AttentionSystem attention = new AttentionSystem();
+            int accepted = 0;
+            int ignored = 0;
+
+            for (int offer = 0; offer < 5; offer++)
+            {
+                manager.Clear();
+                True(manager.TryAddDangleFruit(slugcat.Center + new Vec2(8.0, 0.0)),
+                    "offer " + offer + " can be placed");
+                VirtualInput input;
+                if (!manager.TryProduceInput(slugcat, graphics, attention, out input))
+                {
+                    ignored++;
+                    True(manager.Foods[0].State == DesktopFoodState.Ignored,
+                        "a refused food remains visible and physical");
+                    continue;
+                }
+
+                accepted++;
+                for (int tick = 0; tick < 80; tick++)
+                    manager.StepInteraction(slugcat, graphics);
+            }
+
+            True(accepted > 0 && accepted < 5 && ignored > 0,
+                "five rapid offers include both eating and refusal; accepted=" + accepted);
+            True(manager.Fullness <= DesktopFoodManager.MaximumFullness,
+                "fullness never exceeds its capacity");
+            double beforeDigestion = manager.Fullness;
+            for (int tick = 0; tick < DesktopFoodManager.DigestionTicksPerFoodPoint; tick++)
+                manager.StepMetabolism();
+            Near(Math.Max(0.0, beforeDigestion - 1.0), manager.Fullness, 0.001,
+                "one food point digests over the configured interval");
         }
 
         private static void FixedStepUsesFortyHertz()
@@ -2095,6 +2190,16 @@ namespace RainWorldDesktopPet.Tests
                         StringComparison.OrdinalIgnoreCase),
                         "DangleFruit must resolve from the installed original atlas");
                 }
+                AtlasSprite eggLayer;
+                True(set.TryGet("EggBugEggColor", out eggLayer),
+                    "embedded original EggBugEggColor");
+                True(set.TryGet("EggBugEggColorEaten", out eggLayer),
+                    "embedded original EggBugEggColorEaten");
+                True(set.TryGet("JetFishEyeA", out eggLayer),
+                    "embedded original JetFishEyeA detail");
+                True(eggLayer.Atlas.ImagePath.EndsWith("#rainWorld",
+                    StringComparison.OrdinalIgnoreCase),
+                    "EggBugEgg layers must resolve from the installed original atlas");
                 for (int i = 0; i < SlugcatVisualProfiles.All.Count; i++)
                 {
                     SlugcatVisualProfile profile = SlugcatVisualProfiles.All[i];

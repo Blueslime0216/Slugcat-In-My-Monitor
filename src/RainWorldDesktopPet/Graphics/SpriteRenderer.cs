@@ -1138,6 +1138,11 @@ namespace RainWorldDesktopPet.Graphics
                     Vec2 direction = MathUtil.SlerpDirection(food.LastRotation,
                         food.Rotation, interpolation);
                     double angle = AimScreen(Vec2.Zero, direction);
+                    if (food.Kind == DesktopFoodKind.EggBugEgg)
+                    {
+                        DrawEggBugEgg(graphics, food, center, direction, angle);
+                        continue;
+                    }
                     AtlasSprite ignored;
                     bool hasFront = atlas != null &&
                         atlas.TryGet(food.FrontElement, out ignored);
@@ -1163,6 +1168,42 @@ namespace RainWorldDesktopPet.Graphics
             finally
             {
                 graphics.Restore(state);
+            }
+        }
+
+        private void DrawEggBugEgg(System.Drawing.Graphics graphics, DesktopFood food,
+            Vec2 center, Vec2 direction, double angle)
+        {
+            const double swellFactor = 1.15;
+            center -= direction * (3.0 * swellFactor);
+            double scaleX = 0.7 * swellFactor;
+            double scaleY = 0.75 * swellFactor;
+            AtlasSprite ignored;
+            bool hasShell = atlas != null &&
+                atlas.TryGet(food.FrontElement, out ignored);
+            bool hasColor = atlas != null &&
+                atlas.TryGet(food.BackElement, out ignored);
+            bool hasEye = atlas != null &&
+                atlas.TryGet(food.DetailElement, out ignored);
+            Color shell = Color.FromArgb(255, 30, 28, 38);
+            Color liquid = HslToRgb(food.VisualHue + 0.5, 1.0, 0.5);
+            Color eyeBase = HslToRgb(food.VisualHue, 1.0, 0.5);
+            Color eye = LerpColor(eyeBase, shell, 0.5);
+
+            if (hasShell)
+                DrawElement(graphics, food.FrontElement, center, angle,
+                    scaleX, scaleY, 0.5, 0.3, shell);
+            if (hasColor)
+                DrawElement(graphics, food.BackElement, center, angle,
+                    scaleX, scaleY, 0.5, 0.3, liquid);
+            if (hasEye)
+                DrawElement(graphics, food.DetailElement, center, angle,
+                    0.45 * swellFactor, 0.45 * swellFactor, 0.5,
+                    food.SpriteFrame == 0 ? 0.7 : 0.4, eye);
+            if (!hasShell && !hasColor && !hasEye)
+            {
+                FillCircle(graphics, center, 5.0, liquid);
+                FillCircle(graphics, center - direction * 2.0, 2.0, eye);
             }
         }
 

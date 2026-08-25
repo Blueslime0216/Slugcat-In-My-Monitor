@@ -6,7 +6,8 @@ namespace RainWorldDesktopPet.Physics
 {
     public enum DesktopFoodKind
     {
-        DangleFruit
+        DangleFruit,
+        EggBugEgg
     }
 
     public enum DesktopFoodState
@@ -15,6 +16,7 @@ namespace RainWorldDesktopPet.Physics
         Claimed,
         Held,
         Biting,
+        Ignored,
         Consumed,
         Expired
     }
@@ -30,6 +32,8 @@ namespace RainWorldDesktopPet.Physics
             { "DangleFruit0B", "DangleFruit1B", "DangleFruit2B" };
         public const int DangleFruitInitialBites = 3;
         public const int DangleFruitFoodPoints = 1;
+        public const int EggBugEggInitialBites = 2;
+        public const int EggBugEggFoodPoints = 1;
         public const int DefaultLifetimeTicks = 1200;
 
         private const double Gravity = 0.9;
@@ -40,12 +44,20 @@ namespace RainWorldDesktopPet.Physics
         private Vec2 lastRotation;
 
         public DesktopFood(DesktopFoodKind kind, Vec2 position)
+            : this(kind, position, 0.13)
+        {
+        }
+
+        public DesktopFood(DesktopFoodKind kind, Vec2 position, double visualHue)
         {
             Kind = kind;
-            Chunk = new BodyChunk(0, position, 8.0, 0.2);
+            bool egg = kind == DesktopFoodKind.EggBugEgg;
+            Chunk = new BodyChunk(0, position, egg ? 4.6 : 8.0, 0.2);
             State = DesktopFoodState.Free;
-            BitesRemaining = DangleFruitInitialBites;
-            FoodPoints = DangleFruitFoodPoints;
+            InitialBites = egg ? EggBugEggInitialBites : DangleFruitInitialBites;
+            BitesRemaining = InitialBites;
+            FoodPoints = egg ? EggBugEggFoodPoints : DangleFruitFoodPoints;
+            VisualHue = visualHue - Math.Floor(visualHue);
             rotation = Vec2.Down;
             lastRotation = rotation;
         }
@@ -53,8 +65,10 @@ namespace RainWorldDesktopPet.Physics
         public DesktopFoodKind Kind { get; private set; }
         public readonly BodyChunk Chunk;
         public DesktopFoodState State { get; private set; }
+        public int InitialBites { get; private set; }
         public int BitesRemaining { get; private set; }
         public int FoodPoints { get; private set; }
+        public double VisualHue { get; private set; }
         public int AgeTicks { get; private set; }
         public Vec2 Rotation { get { return rotation; } }
         public Vec2 LastRotation { get { return lastRotation; } }
@@ -71,15 +85,36 @@ namespace RainWorldDesktopPet.Physics
             get
             {
                 return State == DesktopFoodState.Free ||
-                    State == DesktopFoodState.Claimed;
+                    State == DesktopFoodState.Claimed ||
+                    State == DesktopFoodState.Ignored;
             }
         }
         public int SpriteFrame
         {
-            get { return MathUtil.Clamp(DangleFruitInitialBites - BitesRemaining, 0, 2); }
+            get { return MathUtil.Clamp(InitialBites - BitesRemaining, 0, InitialBites - 1); }
         }
-        public string FrontElement { get { return FrontElements[SpriteFrame]; } }
-        public string BackElement { get { return BackElements[SpriteFrame]; } }
+        public string FrontElement
+        {
+            get
+            {
+                return Kind == DesktopFoodKind.EggBugEgg
+                    ? (SpriteFrame == 0 ? "DangleFruit0A" : "DangleFruit1A")
+                    : FrontElements[SpriteFrame];
+            }
+        }
+        public string BackElement
+        {
+            get
+            {
+                return Kind == DesktopFoodKind.EggBugEgg
+                    ? (SpriteFrame == 0 ? "EggBugEggColor" : "EggBugEggColorEaten")
+                    : BackElements[SpriteFrame];
+            }
+        }
+        public string DetailElement
+        {
+            get { return Kind == DesktopFoodKind.EggBugEgg ? "JetFishEyeA" : null; }
+        }
 
         public void SetCreationVelocity(Vec2 velocity)
         {
@@ -90,6 +125,13 @@ namespace RainWorldDesktopPet.Physics
         {
             if (State != DesktopFoodState.Free) return false;
             State = DesktopFoodState.Claimed;
+            return true;
+        }
+
+        public bool Ignore()
+        {
+            if (State != DesktopFoodState.Free) return false;
+            State = DesktopFoodState.Ignored;
             return true;
         }
 
@@ -132,7 +174,10 @@ namespace RainWorldDesktopPet.Physics
         {
             if (State != DesktopFoodState.Held &&
                 State != DesktopFoodState.Biting) return;
-            State = DesktopFoodState.Free;
+            // Keep the previous appetite decision after an interrupted bite.
+            // The owning manager can reacquire a dropped accepted item without
+            // rerolling it into an ignored one.
+            State = DesktopFoodState.Claimed;
             Chunk.Velocity = velocity;
         }
 

@@ -42,6 +42,8 @@ namespace RainWorldDesktopPet.UI
         private readonly ToolStripMenuItem skinEditorItem;
         private readonly ToolStripMenuItem foodMenu;
         private readonly ToolStripMenuItem feedDangleFruitItem;
+        private readonly ToolStripMenuItem feedEggBugEggItem;
+        private readonly ToolStripMenuItem fullnessStatusItem;
         private readonly ToolStripMenuItem clearFoodsItem;
         private readonly List<GameLoop> gameLoops = new List<GameLoop>();
         private readonly SlugcatPose[] poseBuffer = new SlugcatPose[MaximumSlugcats];
@@ -156,11 +158,18 @@ namespace RainWorldDesktopPet.UI
             feedDangleFruitItem = new ToolStripMenuItem(
                 T("파란 열매 주기", "Give Dangle Fruit"));
             feedDangleFruitItem.Click += FeedDangleFruit;
+            feedEggBugEggItem = new ToolStripMenuItem(
+                T("알벌레 알 주기", "Give Eggbug Egg"));
+            feedEggBugEggItem.Click += FeedEggBugEgg;
+            fullnessStatusItem = new ToolStripMenuItem();
+            fullnessStatusItem.Enabled = false;
             clearFoodsItem = new ToolStripMenuItem(
                 T("선택한 슬러그캣의 먹이 치우기", "Clear Selected Slugcat's Food"));
             clearFoodsItem.Click += ClearSelectedFoods;
             foodMenu.DropDownItems.Add(feedDangleFruitItem);
+            foodMenu.DropDownItems.Add(feedEggBugEggItem);
             foodMenu.DropDownItems.Add(new ToolStripSeparator());
+            foodMenu.DropDownItems.Add(fullnessStatusItem);
             foodMenu.DropDownItems.Add(clearFoodsItem);
             foodMenu.DropDownOpening += RefreshFoodMenu;
             menu.Items.Add(settingsItem);
@@ -737,13 +746,33 @@ namespace RainWorldDesktopPet.UI
             feedDangleFruitItem.Enabled = gameLoop != null &&
                 activeFoods < MaximumFoods &&
                 gameLoop.Foods.Foods.Count < DesktopFoodManager.MaximumActiveFoods;
+            feedEggBugEggItem.Enabled = feedDangleFruitItem.Enabled;
+            fullnessStatusItem.Text = gameLoop == null
+                ? T("포만감 -", "Fullness -")
+                : T("포만감 ", "Fullness ") +
+                    gameLoop.Foods.Fullness.ToString("0.0") + "/" +
+                    DesktopFoodManager.MaximumFullness.ToString("0.0");
             clearFoodsItem.Enabled = gameLoop != null && gameLoop.Foods.Foods.Count > 0;
         }
 
         private void FeedDangleFruit(object sender, EventArgs e)
         {
+            FeedFood(DesktopFoodKind.DangleFruit);
+        }
+
+        private void FeedEggBugEgg(object sender, EventArgs e)
+        {
+            FeedFood(DesktopFoodKind.EggBugEgg);
+        }
+
+        private void FeedFood(DesktopFoodKind kind)
+        {
             if (gameLoop == null) return;
-            if (CountActiveFoods() >= MaximumFoods || !gameLoop.FeedDangleFruit())
+            bool spawned = CountActiveFoods() < MaximumFoods &&
+                (kind == DesktopFoodKind.EggBugEgg
+                    ? gameLoop.FeedEggBugEgg()
+                    : gameLoop.FeedDangleFruit());
+            if (!spawned)
             {
                 trayIcon.ShowBalloonTip(2500,
                     T("먹이를 더 놓을 수 없습니다", "Food Limit Reached"),
@@ -752,7 +781,14 @@ namespace RainWorldDesktopPet.UI
                         "The desktop supports " + MaximumFoods + " foods total and " +
                         DesktopFoodManager.MaximumActiveFoods + " per Slugcat."),
                     ToolTipIcon.Info);
+                return;
             }
+            if (!gameLoop.Foods.LastSpawnAccepted)
+                trayIcon.ShowBalloonTip(1800,
+                    T("지금은 먹고 싶지 않은가 봅니다", "Not Hungry Right Now"),
+                    T("먹이는 그대로 남지만, 포만감과 기분에 따라 이번에는 먹지 않습니다.",
+                        "The food remains, but fullness and appetite made this offer uninteresting."),
+                    ToolTipIcon.None);
         }
 
         private void ClearSelectedFoods(object sender, EventArgs e)
