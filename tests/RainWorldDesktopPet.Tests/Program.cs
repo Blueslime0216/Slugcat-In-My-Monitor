@@ -60,6 +60,8 @@ namespace RainWorldDesktopPet.Tests
             Run("Swept free-fall collision lands on the desktop floor", FreeFallLandsOnDesktopFloor);
             Run("BodyChunkConnection projects to its target distance", ConnectionProjectsDistance);
             Run("Desktop floor collision prevents tunneling", DesktopFloorCollision);
+            Run("Dangle Fruit preserves the original three-bite edible contract",
+                DangleFruitPreservesOriginalEdibleContract);
             Run("Each monitor contributes floor, taskbar, and exposed boundaries", MonitorTerrainTopologyIsExplicit);
             Run("Window-edge falls land on the first lower window", WindowEdgeFallLandsOnLowerWindow);
             Run("Window-edge falls with empty space land on monitor terrain", EmptyAreaFallLandsOnMonitorFloor);
@@ -357,6 +359,36 @@ namespace RainWorldDesktopPet.Tests
                 Console.WriteLine("FAIL  " + name);
                 Console.WriteLine("      " + exception.Message);
             }
+        }
+
+        private static void DangleFruitPreservesOriginalEdibleContract()
+        {
+            DesktopFood fruit = new DesktopFood(DesktopFoodKind.DangleFruit,
+                new Vec2(100.0, 80.0));
+            Equal(3, fruit.BitesRemaining, "DangleFruit starts with three bites");
+            Equal(1, fruit.FoodPoints, "DangleFruit grants one food point");
+            Near(8.0, fruit.Chunk.Radius, 0.000001,
+                "DangleFruit keeps its original radius");
+            Near(0.2, fruit.Chunk.Mass, 0.000001,
+                "DangleFruit keeps its original mass");
+            True(fruit.FrontElement == "DangleFruit0A",
+                "the untouched fruit uses atlas frame zero");
+
+            True(fruit.Claim(), "a free fruit can be reserved");
+            True(fruit.PickUp(new Vec2(102.0, 77.0)),
+                "a reserved fruit can be picked up");
+            True(fruit.BeginBiting(), "a held fruit can enter the bite sequence");
+            True(fruit.Bite(), "the first bite succeeds");
+            Equal(2, fruit.BitesRemaining, "the first bite leaves two bites");
+            True(fruit.FrontElement == "DangleFruit1A",
+                "the first bite advances the original atlas frame");
+            True(fruit.Bite(), "the second bite succeeds");
+            True(fruit.FrontElement == "DangleFruit2A",
+                "the second bite advances the original atlas frame");
+            True(fruit.Bite(), "the final bite succeeds");
+            True(fruit.State == DesktopFoodState.Consumed,
+                "the final bite consumes the item");
+            True(!fruit.Bite(), "a consumed item cannot be bitten again");
         }
 
         private static void FixedStepUsesFortyHertz()
