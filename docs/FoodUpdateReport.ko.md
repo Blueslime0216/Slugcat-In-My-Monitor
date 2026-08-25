@@ -6,13 +6,13 @@
 
 ## 1. 업데이트 결과
 
-이번 업데이트는 데스크톱 Slugcat에게 실제로 먹이를 주고, Slugcat이 먹이 쪽으로 이동해 집어 들어 베어 먹는 음식 시스템을 추가한다. 지원 아이템은 Rain World의 파란 열매 `DangleFruit`, 알벌레 알 `EggBugEgg`, 슬라임 몰드 `SlimeMold`, 민들레 복숭아 `DandelionPeach`, 발광초 `GlowWeed`, 버섯 `Mushroom`의 총 6종이다.
+이번 업데이트는 데스크톱 Slugcat에게 실제로 먹이를 주고, Slugcat이 먹이 쪽으로 이동해 집어 들어 베어 먹는 음식 시스템을 추가한다. 지원 아이템은 Rain World의 파란 열매 `DangleFruit`와 알벌레 알 `EggBugEgg`다.
 
 사용 절차는 다음과 같다.
 
 1. 시스템 트레이의 Slugcat 아이콘을 우클릭한다.
 2. `먹이 주기 · 슬러그캣 N` 메뉴를 연다.
-3. 6종 중 원하는 음식의 `주기` 항목을 선택한다.
+3. `파란 열매 주기` 또는 `알벌레 알 주기`를 선택한다.
 4. 현재 선택된 Slugcat에서 무작위 방향과 거리의 상공에 먹이가 나타나 바닥으로 떨어진다.
 5. Slugcat은 포만감과 무작위 appetite 판정에 따라 접근해 먹거나, 관심을 보이지 않고 남겨 둔다.
 
@@ -24,13 +24,9 @@
 
 - `DangleFruit` 물리 객체
 - `EggBugEgg` 물리 객체, 원본 3-layer sprite 조합과 5구간 꼬리 mesh
-- `SlimeMold`, `DandelionPeach`, `GlowWeed`, `Mushroom` 물리 객체와 원본 atlas/procedural 조합
-- 6종의 bites, food points, 물리값, atlas frame, 장식 수, 효과를 모은 immutable `DesktopFoodDefinition` registry
-- 슬라임 몰드 8–14개 점액 장식, 민들레 복숭아 5–7개 솜털, 발광초 광원, 버섯 6구간 줄기와 광원
-- 버섯 섭취 후 320 ticks(8초) 동안 Slugcat만 3 tick 중 1 tick을 건너뛰는 완만한 시간 지연 효과
 - 원작 `ApplyPalette`를 재현하는 음식 전용 desktop palette
 - 자유, 예약, 들기, 먹는 중, 소비, 만료 상태
-- 음식별 원작 bites/food 계약: 3/1(파란 열매·슬라임 몰드·민들레 복숭아·발광초), 2/1(알벌레 알), 1/0(버섯)
+- 원작의 3 bites와 1 food point 계약
 - 원작에 대응하는 반지름 8, 질량 0.2, 중력 0.9, air friction 0.999, surface friction 0.7, bounce 0.2
 - 로컬 Rain World 설치본의 `DangleFruit0A/B`, `1A/B`, `2A/B` atlas frame 사용
 - 선택된 Slugcat 전용 먹이 예약
@@ -53,7 +49,7 @@
 - 사용자가 먹이를 직접 드래그하는 기능
 - 서로 다른 Slugcat이 하나의 먹이를 두고 경쟁하는 기능
 - 다른 높이의 창으로 이동하는 장거리 먹이 pathfinding
-- Fly, WaterNut, JellyFish, KarmaFlower 등 물·생물·진행도 시스템에 의존하는 복합 아이템
+- Fly, Mushroom, WaterNut, JellyFish, KarmaFlower 등 복합 아이템
 
 ## 3. Rain World 원본 조사 결과
 
@@ -72,13 +68,6 @@
 
 `EggBugEgg`도 한 개 BodyChunk를 사용하며 초기 bites는 2, food points는 1이다. 기본 swell 상태의 반지름은 약 4.6, 질량은 0.2다. 원작은 `DangleFruit0A/1A`, `EggBugEggColor/EggBugEggColorEaten`, `JetFishEyeA`를 겹쳐 그리고 5구간의 유연한 mesh를 덧붙인다. 데스크톱 구현은 세 atlas layer와 bite 교체를 보존하고, 원작 segment 수와 길이를 기준으로 가벼운 5구간 꼬리 mesh를 그린다. 방의 충돌과 particle system이 필요한 liquid drip만 제외했다.
 
-추가 4종은 로컬 `Assembly-CSharp.dll`의 생성자, `BitByPlayer`, `FoodPoints`, `InitiateSprites`, `ApplyPalette`를 읽어 다음 계약을 확인했다.
-
-- `SlimeMold`: 3 bites, 1 food point, radius 5, mass 0.12, gravity 0.9. 원작의 작은 타입을 채택하고 8–14개 점액 장식을 deterministic하게 배치한다.
-- `DandelionPeach`: 3 bites, 1 food point, radius 5.5, mass 0.34, gravity 0.3, air friction 0.996, bounce 0.4, surface friction 0.95. 5–7개 솜털과 느린 낙하·미세한 좌우 drift를 보존한다.
-- `GlowWeed`: 3 bites, 1 food point, radius 8, mass 0.2. 원작 `(0.8, 1, 0.4)` 황록색과 개체별 15–35 light radius를 데스크톱 광원 크기로 변환한다.
-- `Mushroom`: 1 bite, 0 food points, radius 2, mass 0.05, air friction 0.998. 원작은 `mushroomCounter`에 320을 더한다. 데스크톱 전체나 사용자의 입력을 늦추지 않고 해당 Slugcat의 AI·물리·graphics update만 2/3 속도로 실행한다.
-
 사용자 스크린샷을 기준으로 원본 DLL의 색상 경로를 다시 조사했다. `DangleFruit.ApplyPalette`는 A 레이어를 `RoomPalette.blackColor`, B 레이어를 순청색 `(0, 0, 1)`과 `blackColor`의 darkness 혼합색으로 설정한다. 기존 데스크톱 코드는 B를 어둡게 그리고 A를 밝은 하늘색으로 덮어 레이어 역할과 순서가 모두 반대였다. 수정 후에는 A를 먼저 검은 외곽색으로, B를 나중에 짙은 포화 청색으로 그린다.
 
 일반 `EggBug`의 hue는 전체 색상환의 균등 난수가 아니다. 개체 `EntityID` 시드로 `ClampedRandomVariation(0.5, 0.5, 2)`를 계산한 뒤 `-0.15–0.10` 범위로 보간하며, 떨어진 알은 부모의 hue를 상속한다. 기존 구현의 `Random.NextDouble()`은 `0–1` 전체를 사용했기 때문에 원작 일반 알벌레 분포와 무관한 조합이 대부분이었고, 낮은 확률로만 원작과 비슷해졌다. 현재 구현은 원작의 제한 범위와 S-curve 분포를 재현한다. 최종 shell, liquid, detail 색도 원작 `EggBugGraphics.EggColors`의 HSL 및 darkness 보간식을 따른다.
@@ -93,7 +82,7 @@
 
 파일: `src/RainWorldDesktopPet/Physics/DesktopFood.cs`
 
-한 개 음식의 물리와 edible 상태를 소유한다. `BodyChunk` 한 개를 사용하며, 종류별 값은 `Physics/DesktopFoodDefinition.cs`의 registry에서 조회한다. atlas element 이름도 미리 정의된 배열을 사용하므로 렌더 프레임마다 문자열을 조합하지 않는다. 새 정적 음식을 추가할 때 큰 종류별 조건문 대신 정의 한 항목과 전용 renderer만 추가할 수 있다.
+한 개 음식의 물리와 edible 상태를 소유한다. `BodyChunk` 한 개를 사용하며, atlas element 이름은 정적 배열에서 조회한다. 렌더 프레임마다 문자열을 조합하지 않으므로 불필요한 GC 할당이 없다.
 
 상태 흐름:
 
@@ -112,7 +101,7 @@
 
 먹이는 현재 지지 표면 위에서 140–360 desktop pixels 떨어진 무작위 방향에 생성된다. 68%는 현재 바라보는 방향, 32%는 반대 방향이며, 바닥 위 45–120px 높이에서 실제 물리로 떨어진다. 지지 표면을 찾지 못하면 가장 가까운 monitor work area의 floor를 사용하고, 생성 위치는 표면 좌우 범위 안으로 clamp한다.
 
-접근 거리가 충분히 가까워지고 Slugcat이 grounded 상태이면 먹이를 집는다. 8 ticks 동안 들기 자세를 유지한 뒤 18 ticks 간격으로 bite한다. 각 음식은 registry의 bite 수와 food points를 사용한다. 버섯은 포만감과 별개인 효과 아이템이며 이미 버섯 효과가 진행 중이면 새 버섯을 거절한다.
+접근 거리가 충분히 가까워지고 Slugcat이 grounded 상태이면 먹이를 집는다. 8 ticks 동안 들기 자세를 유지한 뒤 18 ticks 간격으로 bite한다. 파란 열매는 3회, 알벌레 알은 2회 뒤 1 food point를 얻는다.
 
 각 Slugcat은 0–3점의 세션 포만감을 가진다. 공복이면 첫 제안을 항상 수락하지만, 이후에는 포만감이 높을수록 수락 확률이 78%에서 12%까지 낮아진다. 이미 수락했지만 아직 먹지 않은 아이템도 예상 포만감에 합산하므로 여러 개를 빠르게 놓아도 전부 예약하지 않는다. 예상 포만감이 3점이면 반드시 거절한다. 거절한 먹이는 `Ignored` 상태로 화면과 물리에 남지만 AI target이 되지 않는다. 포만감 1점은 3600 ticks, 약 90초에 걸쳐 소화된다.
 
@@ -129,8 +118,6 @@
 5. 기존 Slugcat graphics 업데이트
 6. 최신 머리 위치에 든 음식을 고정하고 bite timer 진행
 
-버섯 효과 중에는 40Hz 음식 물리와 효과 타이머는 계속 진행하되, 해당 Slugcat의 AI·입력·물리·graphics·bite 진행을 3 tick 중 1 tick 생략한다. 그래서 다른 프로그램의 마우스/키보드, Windows 애니메이션, 다른 Slugcat, 떨어지는 음식은 느려지지 않는다. 남은 시간은 트레이 메뉴에 초 단위로 표시되고 Slugcat 주변의 약한 aura가 마지막 2초 동안 서서히 사라진다.
-
 기존 AI를 매 tick 계속 실행하므로 성격, 필요도, cooldown 값이 음식 섭취 중에도 멈추지 않는다. 음식 controller는 먹이가 활성화된 동안 최종 이동 intent만 제한한다.
 
 ### 렌더링과 합성
@@ -139,7 +126,7 @@
 
 음식을 위한 별도 DirectComposition surface를 생성하지 않는다. 각 음식은 소유 Slugcat의 기존 render batch에 포함되고, 해당 loop의 bounds만 필요한 만큼 union한다. 기존 최소 surface 크기가 384px이고 먹이가 가까운 곳에 생기므로 대부분의 경우 surface resize도 발생하지 않는다.
 
-렌더링은 로컬 atlas의 마스크 frame과 재사용되는 procedural geometry를 조합한다. `FoodRenderPalette`가 6종의 원작 레이어별 tint와 알벌레 hue 분포를 한곳에서 계산한다. 슬라임 몰드 장식, 민들레 솜털, 버섯 줄기는 음식 생성 시 저장한 `VisualVariant`에서 결정되므로 프레임마다 난수를 호출하지 않고 모습도 깜빡이지 않는다. 데스크톱에는 `RoomPalette`, `Room.Darkness`, `LightSourceExposure`가 없으므로 중립적인 고정 black/fog palette와 reference darkness `0.4`를 사용한다.
+렌더링은 로컬 atlas에 frame이 있으면 파란 열매의 두 레이어 또는 알벌레 알의 세 레이어를 사용한다. `FoodRenderPalette`가 원작의 레이어별 tint와 알벌레 hue 분포를 한곳에서 계산한다. 데스크톱에는 `RoomPalette`, `Room.Darkness`, `LightSourceExposure`가 없으므로 중립적인 고정 black/fog palette와 reference darkness `0.4`를 사용한다. 이 값은 사용자가 제공한 어두운 인게임 파란 열매와 바탕화면 위 가시성을 함께 맞추기 위한 desktop 기준값이다.
 
 알벌레 알의 꼬리는 별도 bitmap이나 물리 객체를 만들지 않고 renderer가 재사용하는 12개 꼭짓점 배열로 그린다. 색상 brush도 기존 `bodyBrushes` 캐시를 공유해 매 프레임 GC 할당을 만들지 않는다. 로컬 설치본이 예상과 달라 frame을 찾지 못할 경우 앱 전체를 중단하지 않고 작은 procedural fallback을 그린다. 정상 설치본에서는 자동 테스트가 모든 사용 frame과 `#rainWorld` 출처를 확인한다.
 
@@ -152,10 +139,6 @@
 - `먹이 주기 · 슬러그캣 N`
   - `파란 열매 주기`
   - `알벌레 알 주기`
-  - `슬라임 몰드 주기`
-  - `민들레 복숭아 주기`
-  - `발광초 주기`
-  - `버섯 주기`
   - `포만감 0.0/3.0`
   - `선택한 슬러그캣의 먹이 치우기`
 
@@ -183,8 +166,6 @@
 - atlas image는 기존 `RainWorldAtlasSet` 캐시를 공유한다.
 - 음식 palette 계산은 작은 값 형식으로 반환하며 bitmap을 만들지 않는다.
 - 알벌레 꼬리 꼭짓점 배열과 색상 brush를 renderer가 재사용한다.
-- 버섯 줄기 꼭짓점 배열, 효과 shader mask와 tint cache를 기존 renderer가 재사용한다.
-- 추가 장식의 배치 난수는 생성 시 하나의 variant로 고정하며 update/render hot path에서 `Random`을 호출하지 않는다.
 - element 이름은 정적 문자열 배열로 캐시한다.
 - 음식은 Slugcat당 5개, 전체 12개로 제한한다.
 - 먹지 않은 음식은 1200 ticks 후 제거한다.
@@ -213,10 +194,6 @@
 - 140–360px 무작위 생성 범위와 바닥 위 낙하 시작
 - 다섯 번 연속 제안에서 섭취와 거절이 모두 발생하는지 확인
 - 최대 포만감 제한과 90초당 1점 소화
-- 추가 4종의 bites, food points, radius, mass, gravity/friction과 장식 개수 범위
-- 슬라임 몰드 주황색, 민들레 복숭아 청백색, 발광초 황록색, 버섯 fog palette
-- 버섯이 food point/포만감을 올리지 않고 320 ticks 효과를 시작하는지 확인
-- 버섯 효과가 정확히 3 tick 중 1 tick을 생략하고 real fixed tick으로 감소하는지 확인
 
 검증 명령:
 
@@ -225,7 +202,7 @@
 .\artifacts\Release\RainWorldDesktopPet.Tests.exe --food-preview .\artifacts\FoodPalettePreview.png
 ```
 
-두 번째 명령은 저장소에 에셋을 복사하지 않고 로컬 Rain World atlas에서 6종을 한 장에 렌더링하는 시각 검증용 명령이다. 실행 파일은 `artifacts/Release/SlugcatInMyMonitor.exe`에 생성된다. 네이티브 렌더러인 `SlugcatInMyMonitor.DirectComposition.dll`도 같은 폴더에 있어야 한다.
+두 번째 명령은 저장소에 에셋을 복사하지 않고 로컬 Rain World atlas에서 파란 열매 한 개와 서로 다른 hue의 알벌레 알 네 개를 렌더링하는 시각 검증용 명령이다. 최종 Release 빌드는 경고 0개, 오류 0개로 완료했고 기존 전체 회귀 테스트와 새 음식 테스트가 모두 통과했다. 실행 파일은 `artifacts/Release/SlugcatInMyMonitor.exe`에 생성된다. 네이티브 렌더러인 `SlugcatInMyMonitor.DirectComposition.dll`도 같은 폴더에 있어야 한다.
 
 빌드 도중 기존 실행 파일이 실행 중이면 Windows가 산출물 교체를 막는다. 이 경우 트레이에서 앱을 종료한 뒤 다시 빌드해야 한다.
 
@@ -238,8 +215,6 @@
 - `f638d0f` — `feat: add Eggbug Eggs and appetite-driven feeding`
 - `4efd419` — `docs: record appetite update and fruit color issue`
 - `a26036c` — `fix: restore original food palette behavior`
-- `cb06092` — `docs: record food palette correction`
-- `05bd68d` — `feat: add four Rain World foods`
 
 각 커밋은 `origin/feature/food-update`에 순차적으로 push했다.
 
@@ -258,7 +233,7 @@
 다음 후보 평가:
 
 - EggBugEgg: 두 번째 음식과 가벼운 5구간 꼬리 mesh 구현 완료. liquid drip은 후속 시각 개선 후보
-- SlimeMold, DandelionPeach, GlowWeed, Mushroom: 구현 완료
+- Mushroom: 먹는 동작은 단순하지만 time slowdown을 데스크톱에서 어떻게 표현할지 제품 결정이 필요
 - Fly: creature AI, 날개 animation, capture, sound가 필요하므로 별도 creature 시스템 이후로 연기
 - WaterNut/JellyFish: 물, 전기, tentacle 의존성이 커서 현재 desktop terrain 모델과 맞지 않음
 - KarmaFlower: karma와 death persistence가 없으므로 장식 이상의 의미를 정하기 전에는 추가하지 않음
@@ -272,8 +247,6 @@
 - 현재 들기 위치는 head 기반 mouth anchor다. 원작처럼 grasp별 손 animation을 완전히 재현하려면 `SlugcatGraphics`에 food hand target mode를 추가해야 한다.
 - bite event 이름은 남기지만 사운드는 재생하지 않는다. 프로젝트 전체 sound backend가 생길 때 event를 연결할 수 있다.
 - 포만감은 세션 동안만 유지되고 앱을 다시 실행하면 공복으로 시작한다. 장기 저장은 방치형 사용에서 원치 않는 벌점이 될 수 있으므로 현재는 의도적으로 제외했다.
-- 버섯은 원작처럼 전역 게임 시간을 늦추지 않는다. 데스크톱 전체를 늦추거나 사용자의 입력을 간섭할 수 없으므로 섭취한 Slugcat 하나만 8초 동안 약 2/3 속도로 움직이는 제품 안전성 절충안이다.
-- 민들레 복숭아의 솜털은 별도 물리 입자가 아니라 renderer 장식이다. 화면 밖으로 날아가거나 창 클릭을 가로채지 않는다.
 - 실제 사용 피드백에서 트레이 단계가 번거롭다는 의견이 많을 경우에만 사용자가 직접 지정하는 optional hotkey를 설정 화면에 추가한다. 기본값은 계속 비활성으로 두는 것이 좋다.
 
 ## 11. 라이선스와 배포
