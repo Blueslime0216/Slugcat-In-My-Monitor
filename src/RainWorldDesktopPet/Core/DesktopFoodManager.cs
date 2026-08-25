@@ -72,7 +72,8 @@ namespace RainWorldDesktopPet.Core
         {
             RemoveInactive();
             if (foods.Count >= MaximumActiveFoods) return false;
-            DesktopFood egg = new DesktopFood(DesktopFoodKind.EggBugEgg, position, 0.13);
+            DesktopFood egg = new DesktopFood(DesktopFoodKind.EggBugEgg, position,
+                FoodRenderPalette.CreateNormalEggHue(random));
             foods.Add(egg);
             LastEvent = "EggBugEgg_Spawn";
             return true;
@@ -137,8 +138,10 @@ namespace RainWorldDesktopPet.Core
 
             double dropHeight = DesktopWorldTransform.ToSimulationLength(
                 MathUtil.Lerp(45.0, 120.0, random.NextDouble()));
+            double visualHue = kind == DesktopFoodKind.EggBugEgg
+                ? FoodRenderPalette.CreateNormalEggHue(random) : 0.0;
             DesktopFood food = new DesktopFood(kind,
-                new Vec2(x, y - dropHeight), random.NextDouble());
+                new Vec2(x, y - dropHeight), visualHue);
             food.SetCreationVelocity(new Vec2(direction *
                 MathUtil.Lerp(0.15, 0.75, random.NextDouble()), 0.0));
             foods.Add(food);

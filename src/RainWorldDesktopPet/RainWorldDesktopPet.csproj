@@ -78,6 +78,7 @@
     <Compile Include="Graphics\BodyPart.cs" />
     <Compile Include="Graphics\CompositionBatchPlanner.cs" />
     <Compile Include="Graphics\DirectCompositionHost.cs" />
+    <Compile Include="Graphics\FoodRenderPalette.cs" />
     <Compile Include="Graphics\Limb.cs" />
     <Compile Include="Graphics\ProceduralTail.cs" />
     <Compile Include="Graphics\ParityDiagnostics.cs" />

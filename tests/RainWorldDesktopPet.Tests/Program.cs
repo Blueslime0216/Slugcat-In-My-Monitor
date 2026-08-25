@@ -43,6 +43,21 @@ namespace RainWorldDesktopPet.Tests
                     return 1;
                 }
             }
+            if (args.Length >= 2 && args[0] == "--food-preview")
+            {
+                try
+                {
+                    RenderFoodPreview(args[1]);
+                    return 0;
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine("Food preview failed: " +
+                        exception.GetType().FullName);
+                    Console.WriteLine(exception.Message);
+                    return 1;
+                }
+            }
 
             Run("FixedTimeStep uses 40 Hz independently of render rate", FixedStepUsesFortyHertz);
             Run("Desktop world transform scales original X/Y travel uniformly", DesktopWorldTransformScalesTravelUniformly);
@@ -64,6 +79,8 @@ namespace RainWorldDesktopPet.Tests
                 DangleFruitPreservesOriginalEdibleContract);
             Run("Eggbug Egg preserves its two-bite layered edible contract",
                 EggBugEggPreservesOriginalEdibleContract);
+            Run("Food palettes preserve Dangle Fruit layers and normal Eggbug hue",
+                FoodPalettesMatchOriginalColorRules);
             Run("Food interaction seeks, reserves, and consumes through VirtualInput",
                 FoodInteractionUsesVirtualInputAndConsumes);
             Run("Food offers use a farther randomized drop distance",
@@ -175,6 +192,8 @@ namespace RainWorldDesktopPet.Tests
             else
             {
                 Run("Local embedded original atlas loads without DMS", delegate { EmbeddedOriginalAtlasLoads(localInstallation); });
+                Run("Local food atlas renders deep blue, cyan, and warm egg layers",
+                    delegate { FoodAtlasRendersOriginalPalette(localInstallation); });
                 Run("Installed Workshop mods parse without loading their DLLs",
                     delegate { LocalWorkshopIntegrationsParse(localInstallation); });
             }
@@ -369,6 +388,50 @@ namespace RainWorldDesktopPet.Tests
             }
         }
 
+        private static void RenderFoodPreview(string outputPath)
+        {
+            RainWorldInstallation installation = new RainWorldLocator().Locate(null);
+            if (installation == null) throw new InvalidOperationException(
+                "Rain World installation was not found.");
+            using (Bitmap bitmap = CreateFoodPreview(installation))
+                bitmap.Save(outputPath, ImageFormat.Png);
+        }
+
+        private static Bitmap CreateFoodPreview(RainWorldInstallation installation)
+        {
+            RainWorldAssetLoader loader = new RainWorldAssetLoader(installation);
+            RainWorldAtlasSet set = loader.TryLoadPlayerAtlas();
+            if (set == null) throw new InvalidOperationException(
+                "Rain World food atlas was not loaded.");
+            Bitmap bitmap = new Bitmap(640, 220, PixelFormat.Format32bppPArgb);
+            try
+            {
+                DesktopFoodManager manager = new DesktopFoodManager(81723);
+                manager.TryAddDangleFruit(new Vec2(35.0, 55.0));
+                for (int i = 0; i < 4; i++)
+                    manager.TryAddEggBugEgg(new Vec2(75.0 + i * 40.0, 55.0));
+                using (SpriteRenderer renderer = new SpriteRenderer(set))
+                using (System.Drawing.Graphics drawing =
+                    System.Drawing.Graphics.FromImage(bitmap))
+                {
+                    drawing.Clear(Color.Transparent);
+                    renderer.RenderFoods(drawing, manager,
+                        new RenderSpace(new Rectangle(0, 0, bitmap.Width,
+                            bitmap.Height)), 2.8, 1.0, false);
+                }
+                return bitmap;
+            }
+            catch
+            {
+                bitmap.Dispose();
+                throw;
+            }
+            finally
+            {
+                set.Dispose();
+            }
+        }
+
         private static void DangleFruitPreservesOriginalEdibleContract()
         {
             DesktopFood fruit = new DesktopFood(DesktopFoodKind.DangleFruit,
@@ -457,6 +520,78 @@ namespace RainWorldDesktopPet.Tests
                 "the first bite switches to the original eaten layers");
             True(egg.Bite() && egg.State == DesktopFoodState.Consumed,
                 "the second bite consumes the egg");
+        }
+
+        private static void FoodPalettesMatchOriginalColorRules()
+        {
+            FoodLayerPalette fruit = FoodRenderPalette.DangleFruit;
+            True(fruit.BaseColor.R < 40 && fruit.BaseColor.G < 40 &&
+                fruit.BaseColor.B < 50,
+                "DangleFruit A uses the desktop RoomPalette black equivalent");
+            True(fruit.PrimaryColor.B >= 150 &&
+                fruit.PrimaryColor.B > fruit.PrimaryColor.R * 8 &&
+                fruit.PrimaryColor.B > fruit.PrimaryColor.G * 8,
+                "DangleFruit B stays a deep saturated blue");
+            True(!(fruit.PrimaryColor.R == 120 && fruit.PrimaryColor.G == 170 &&
+                fruit.PrimaryColor.B == 255),
+                "the former pale sky-blue tint is not retained");
+
+            Random random = new Random(39117);
+            bool sawNegative = false;
+            bool sawPositive = false;
+            for (int i = 0; i < 4096; i++)
+            {
+                double hue = FoodRenderPalette.CreateNormalEggHue(random);
+                True(hue >= FoodRenderPalette.NormalEggHueMinimum - 0.000001 &&
+                    hue <= FoodRenderPalette.NormalEggHueMaximum + 0.000001,
+                    "normal Eggbug hue stays in the original -0.15..0.10 interval");
+                sawNegative |= hue < 0.0;
+                sawPositive |= hue > 0.0;
+            }
+            True(sawNegative && sawPositive,
+                "the constrained hue distribution still varies between eggs");
+
+            FoodLayerPalette egg = FoodRenderPalette.EggBugEgg(-0.025);
+            True(egg.PrimaryColor.G > 220 && egg.PrimaryColor.B > 170 &&
+                egg.PrimaryColor.R < 40,
+                "a representative normal egg keeps its bright cyan liquid");
+            True(egg.DetailColor.R > egg.DetailColor.G * 4 &&
+                egg.DetailColor.R > egg.DetailColor.B * 3,
+                "a representative normal egg keeps its warm red-pink detail");
+        }
+
+        private static void FoodAtlasRendersOriginalPalette(
+            RainWorldInstallation installation)
+        {
+            using (Bitmap bitmap = CreateFoodPreview(installation))
+            {
+                int deepBluePixels = 0;
+                int cyanPixels = 0;
+                int warmPixels = 0;
+                int paleFruitPixels = 0;
+                for (int y = 0; y < bitmap.Height; y++)
+                {
+                    for (int x = 0; x < bitmap.Width; x++)
+                    {
+                        Color color = bitmap.GetPixel(x, y);
+                        if (color.A == 0) continue;
+                        if (color.B > 100 && color.B > color.R * 5 &&
+                            color.B > color.G * 5) deepBluePixels++;
+                        if (color.G > 140 && color.B > 100 &&
+                            color.R < 60) cyanPixels++;
+                        if (color.R > 80 && color.R > color.G * 3 &&
+                            color.R > color.B * 2) warmPixels++;
+                        if (x < 150 && color.R > 70 && color.G > 100 &&
+                            color.B > 180) paleFruitPixels++;
+                    }
+                }
+                True(deepBluePixels > 20,
+                    "the real DangleFruit atlas produces a deep blue layer");
+                True(cyanPixels > 20 && warmPixels > 5,
+                    "the real EggBugEgg atlas produces cyan and warm layers");
+                Equal(0, paleFruitPixels,
+                    "the fruit region contains no former sky-blue tint");
+            }
         }
 
         private static void FoodSpawnUsesFarRandomizedDrop()

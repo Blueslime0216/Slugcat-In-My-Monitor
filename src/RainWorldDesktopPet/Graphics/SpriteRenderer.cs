@@ -55,6 +55,7 @@ namespace RainWorldDesktopPet.Graphics
         private readonly PointF[] tailTextureDestinationTriangle = new PointF[3];
         private readonly PointF[] abilityQuad = new PointF[4];
         private readonly PointF[] abilityTriangle = new PointF[3];
+        private readonly PointF[] eggTailPoints = new PointF[12];
         private readonly Bitmap tailRaster;
         private readonly System.Drawing.Graphics tailRasterGraphics;
         private readonly Bitmap flatLightShaderMask;
@@ -1148,20 +1149,20 @@ namespace RainWorldDesktopPet.Graphics
                         atlas.TryGet(food.FrontElement, out ignored);
                     bool hasBack = atlas != null &&
                         atlas.TryGet(food.BackElement, out ignored);
-                    if (hasBack)
-                        DrawElement(graphics, food.BackElement, center, angle,
-                            1.0, 1.0, 0.5, 0.5,
-                            Color.FromArgb(255, 40, 72, 150));
                     if (hasFront)
                         DrawElement(graphics, food.FrontElement, center, angle,
                             1.0, 1.0, 0.5, 0.5,
-                            Color.FromArgb(255, 120, 170, 255));
+                            FoodRenderPalette.DangleFruit.BaseColor);
+                    if (hasBack)
+                        DrawElement(graphics, food.BackElement, center, angle,
+                            1.0, 1.0, 0.5, 0.5,
+                            FoodRenderPalette.DangleFruit.PrimaryColor);
                     if (!hasFront && !hasBack)
                     {
                         FillCircle(graphics, center, 7.0,
-                            Color.FromArgb(255, 65, 105, 220));
+                            FoodRenderPalette.DangleFruit.PrimaryColor);
                         FillCircle(graphics, center + new Vec2(-2.0, -2.0), 2.0,
-                            Color.FromArgb(230, 175, 205, 255));
+                            FoodRenderPalette.DangleFruit.BaseColor);
                     }
                 }
             }
@@ -1185,26 +1186,51 @@ namespace RainWorldDesktopPet.Graphics
                 atlas.TryGet(food.BackElement, out ignored);
             bool hasEye = atlas != null &&
                 atlas.TryGet(food.DetailElement, out ignored);
-            Color shell = Color.FromArgb(255, 30, 28, 38);
-            Color liquid = HslToRgb(food.VisualHue + 0.5, 1.0, 0.5);
-            Color eyeBase = HslToRgb(food.VisualHue, 1.0, 0.5);
-            Color eye = LerpColor(eyeBase, shell, 0.5);
+            FoodLayerPalette palette = FoodRenderPalette.EggBugEgg(food.VisualHue);
+
+            DrawEggBugTail(graphics, food, center, direction, swellFactor,
+                palette.BaseColor);
 
             if (hasShell)
                 DrawElement(graphics, food.FrontElement, center, angle,
-                    scaleX, scaleY, 0.5, 0.3, shell);
+                    scaleX, scaleY, 0.5, 0.3, palette.BaseColor);
             if (hasColor)
                 DrawElement(graphics, food.BackElement, center, angle,
-                    scaleX, scaleY, 0.5, 0.3, liquid);
+                    scaleX, scaleY, 0.5, 0.3, palette.PrimaryColor);
             if (hasEye)
                 DrawElement(graphics, food.DetailElement, center, angle,
                     0.45 * swellFactor, 0.45 * swellFactor, 0.5,
-                    food.SpriteFrame == 0 ? 0.7 : 0.4, eye);
+                    food.SpriteFrame == 0 ? 0.7 : 0.4, palette.DetailColor);
             if (!hasShell && !hasColor && !hasEye)
             {
-                FillCircle(graphics, center, 5.0, liquid);
-                FillCircle(graphics, center - direction * 2.0, 2.0, eye);
+                FillCircle(graphics, center, 5.0, palette.PrimaryColor);
+                FillCircle(graphics, center - direction * 2.0, 2.0,
+                    palette.DetailColor);
             }
+        }
+
+        private void DrawEggBugTail(System.Drawing.Graphics graphics,
+            DesktopFood food, Vec2 center, Vec2 direction, double swellFactor,
+            Color color)
+        {
+            if (direction.LengthSquared < 0.000001) direction = Vec2.Down;
+            else direction = direction.Normalized;
+            Vec2 perpendicular = new Vec2(-direction.Y, direction.X);
+            const int pointCount = 6;
+            for (int i = 0; i < pointCount; i++)
+            {
+                double progress = i / (double)(pointCount - 1);
+                double distance = (9.5 + i * 2.0) * swellFactor;
+                double bend = Math.Sin((food.AgeTicks + i * 4.0) * 0.08) *
+                    progress * 0.75 * swellFactor;
+                Vec2 point = center + direction * distance + perpendicular * bend;
+                double halfWidth = MathUtil.Lerp(1.15, 0.12, progress) *
+                    swellFactor;
+                eggTailPoints[i] = (point + perpendicular * halfWidth).ToPointF();
+                eggTailPoints[eggTailPoints.Length - 1 - i] =
+                    (point - perpendicular * halfWidth).ToPointF();
+            }
+            graphics.FillPolygon(GetBodyBrush(color), eggTailPoints);
         }
 
         private static DmsSpriteSide SelectTorsoSide(SlugcatPose pose)
