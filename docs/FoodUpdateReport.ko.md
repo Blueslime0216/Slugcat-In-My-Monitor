@@ -6,15 +6,15 @@
 
 ## 1. 업데이트 결과
 
-이번 업데이트는 데스크톱 Slugcat에게 실제로 먹이를 주고, Slugcat이 먹이 쪽으로 이동해 집어 들고 세 번 베어 먹는 첫 번째 음식 시스템을 추가한다. 첫 지원 아이템은 Rain World의 파란 열매인 `DangleFruit`다.
+이번 업데이트는 데스크톱 Slugcat에게 실제로 먹이를 주고, Slugcat이 먹이 쪽으로 이동해 집어 들어 베어 먹는 음식 시스템을 추가한다. 지원 아이템은 Rain World의 파란 열매 `DangleFruit`와 알벌레 알 `EggBugEgg`다.
 
 사용 절차는 다음과 같다.
 
 1. 시스템 트레이의 Slugcat 아이콘을 우클릭한다.
 2. `먹이 주기 · 슬러그캣 N` 메뉴를 연다.
-3. `파란 열매 주기`를 선택한다.
-4. 현재 선택된 Slugcat 앞의 안전한 바닥에 열매가 놓인다.
-5. Slugcat이 열매를 주시하고 접근한 뒤 집어 들며, 원작과 같은 3단계 bite frame으로 먹는다.
+3. `파란 열매 주기` 또는 `알벌레 알 주기`를 선택한다.
+4. 현재 선택된 Slugcat에서 무작위 방향과 거리의 상공에 먹이가 나타나 바닥으로 떨어진다.
+5. Slugcat은 포만감과 무작위 appetite 판정에 따라 접근해 먹거나, 관심을 보이지 않고 남겨 둔다.
 
 전역 단축키, 화면 위 고정 버튼, 다음 마우스 클릭으로 위치를 지정하는 모드는 추가하지 않았다. 따라서 게임, 작업 프로그램, 브라우저의 단축키와 충돌하지 않고 화면을 가리지 않는다. 먹이 자체도 마우스 히트테스트 대상이 아니므로 평상시 바탕화면 클릭을 통과시킨다.
 
@@ -23,6 +23,7 @@
 포함된 기능:
 
 - `DangleFruit` 물리 객체
+- `EggBugEgg` 물리 객체와 원본 3-layer sprite 조합
 - 자유, 예약, 들기, 먹는 중, 소비, 만료 상태
 - 원작의 3 bites와 1 food point 계약
 - 원작에 대응하는 반지름 8, 질량 0.2, 중력 0.9, air friction 0.999, surface friction 0.7, bounce 0.2
@@ -33,13 +34,15 @@
 - 움직이는 창 표면의 이동량 적용
 - 자유 상태는 Slugcat 뒤, 들거나 먹는 상태는 Slugcat 앞에 그리는 레이어 순서
 - 기존 DirectComposition 배치 bounds에 음식 범위 병합
-- Slugcat 한 마리당 최대 3개, 전체 최대 12개 제한
+- 140–360 desktop pixels의 무작위 거리, 45–120px 높이에서 낙하
+- 포만감 최대 3점, 예약 먹이를 포함한 appetite 판정, 약 90초당 1점 소화
+- Slugcat 한 마리당 최대 5개, 전체 최대 12개 제한
 - 약 30초 동안 먹지 않은 자유 음식 자동 만료
 - 선택된 Slugcat의 음식 치우기 메뉴
 
 의도적으로 제외한 기능:
 
-- 배고픔이나 강제적인 food meter
+- 굶주림 벌점이나 동면을 강제하는 생존용 food meter
 - 동면, cycle, karma와 연결된 생존 규칙
 - 사운드 재생
 - 사용자가 먹이를 직접 드래그하는 기능
@@ -61,6 +64,8 @@
 - `ThrowByPlayer()`
 
 원작 Player의 섭취 흐름은 개념적으로 `GrabUpdate → BiteEdibleObject → ObjectEaten → AddFood/AddQuarterFood`다. `DangleFruit`는 `PlayerCarryableItem` 기반의 한 개 BodyChunk 아이템이고, 초기 bites는 3, food points는 1, automatic pickup은 true다. 마지막 bite에서 `ObjectEaten`을 호출하고 grasp를 해제한 뒤 아이템이 소멸한다.
+
+`EggBugEgg`도 한 개 BodyChunk를 사용하며 초기 bites는 2, food points는 1이다. 기본 swell 상태의 반지름은 약 4.6, 질량은 0.2다. 원작은 `DangleFruit0A/1A`, `EggBugEggColor/EggBugEggColorEaten`, `JetFishEyeA`를 겹쳐 그리고 작은 유연한 mesh를 덧붙인다. 데스크톱 구현은 비교에 중요한 세 atlas layer와 bite 교체를 보존하고, room physics에 의존하는 mesh와 liquid drip particle은 제외했다.
 
 이 데스크톱 프로젝트에는 Rain World의 `Room`, `AbstractPhysicalObject`, creature graph, cycle 시스템이 없다. 원작 전체 객체 계층을 이식하면 작은 음식 기능 때문에 결합도와 메모리 비용이 과도하게 커진다. 그래서 `IPlayerEdible`의 사용자에게 보이는 계약만 `DesktopFood`로 옮기고, 기존 `BodyChunk`와 `DesktopCollisionWorld`를 재사용했다.
 
@@ -89,9 +94,11 @@
 
 각 `GameLoop`가 관리자 한 개를 소유한다. 이 소유 관계가 예약 역할을 하므로 여러 Slugcat이 같은 먹이를 동시에 선택하지 않는다. 음식 접근은 기존 AI가 직접 물리를 바꾸는 방식이 아니라 최종 `VirtualInput`만 덮어쓴다. 실제 걷기, 마찰, 충돌은 기존 Slugcat movement 경로가 계속 담당한다.
 
-먹이는 현재 지지 표면 위에서 Slugcat의 진행 방향 앞쪽 약 58 desktop pixels에 생성된다. 지지 표면을 찾지 못하면 가장 가까운 monitor work area의 floor를 사용한다. 생성 위치는 해당 표면 좌우 범위 안으로 clamp한다.
+먹이는 현재 지지 표면 위에서 140–360 desktop pixels 떨어진 무작위 방향에 생성된다. 68%는 현재 바라보는 방향, 32%는 반대 방향이며, 바닥 위 45–120px 높이에서 실제 물리로 떨어진다. 지지 표면을 찾지 못하면 가장 가까운 monitor work area의 floor를 사용하고, 생성 위치는 표면 좌우 범위 안으로 clamp한다.
 
-접근 거리가 충분히 가까워지고 Slugcat이 grounded 상태이면 열매를 집는다. 8 ticks 동안 들기 자세를 유지한 뒤 18 ticks 간격으로 세 번 bite한다. 완료 시 manager 통계에 1 food point를 기록하지만, 영구적인 생존 meter나 벌점에는 연결하지 않는다.
+접근 거리가 충분히 가까워지고 Slugcat이 grounded 상태이면 먹이를 집는다. 8 ticks 동안 들기 자세를 유지한 뒤 18 ticks 간격으로 bite한다. 파란 열매는 3회, 알벌레 알은 2회 뒤 1 food point를 얻는다.
+
+각 Slugcat은 0–3점의 세션 포만감을 가진다. 공복이면 첫 제안을 항상 수락하지만, 이후에는 포만감이 높을수록 수락 확률이 78%에서 12%까지 낮아진다. 이미 수락했지만 아직 먹지 않은 아이템도 예상 포만감에 합산하므로 여러 개를 빠르게 놓아도 전부 예약하지 않는다. 예상 포만감이 3점이면 반드시 거절한다. 거절한 먹이는 `Ignored` 상태로 화면과 물리에 남지만 AI target이 되지 않는다. 포만감 1점은 3600 ticks, 약 90초에 걸쳐 소화된다.
 
 ### `GameLoop`
 
@@ -114,7 +121,7 @@
 
 음식을 위한 별도 DirectComposition surface를 생성하지 않는다. 각 음식은 소유 Slugcat의 기존 render batch에 포함되고, 해당 loop의 bounds만 필요한 만큼 union한다. 기존 최소 surface 크기가 384px이고 먹이가 가까운 곳에 생기므로 대부분의 경우 surface resize도 발생하지 않는다.
 
-렌더링은 로컬 atlas에 frame이 있으면 원본 `DangleFruit` 두 레이어를 사용한다. 로컬 설치본이 예상과 달라 frame을 찾지 못할 경우 앱 전체를 중단하지 않고 작은 파란 원형 fallback을 그린다. 정상 설치본에서는 자동 테스트가 여섯 frame의 존재와 `#rainWorld` 출처를 확인한다.
+렌더링은 로컬 atlas에 frame이 있으면 파란 열매의 두 레이어 또는 알벌레 알의 세 레이어를 사용한다. 로컬 설치본이 예상과 달라 frame을 찾지 못할 경우 앱 전체를 중단하지 않고 작은 procedural fallback을 그린다. 정상 설치본에서는 자동 테스트가 모든 사용 frame과 `#rainWorld` 출처를 확인한다.
 
 ### 트레이 UI
 
@@ -124,9 +131,11 @@
 
 - `먹이 주기 · 슬러그캣 N`
   - `파란 열매 주기`
+  - `알벌레 알 주기`
+  - `포만감 0.0/3.0`
   - `선택한 슬러그캣의 먹이 치우기`
 
-메뉴를 열 때 현재 선택 번호와 제한 상태를 갱신한다. 성공 시 balloon을 띄우지 않아 사용을 방해하지 않고, 제한에 도달했을 때만 짧은 안내를 표시한다.
+메뉴를 열 때 현재 선택 번호, 포만감, 제한 상태를 갱신한다. 수락한 경우 balloon을 띄우지 않고, 먹이를 거절했거나 개수 제한에 도달했을 때만 짧은 안내를 표시한다.
 
 ## 5. 입력과 데스크톱 사용성 검토
 
@@ -149,9 +158,9 @@
 - 음식별 renderer, bitmap, composition surface를 만들지 않는다.
 - atlas image는 기존 `RainWorldAtlasSet` 캐시를 공유한다.
 - element 이름은 정적 문자열 배열로 캐시한다.
-- 음식은 Slugcat당 3개, 전체 12개로 제한한다.
+- 음식은 Slugcat당 5개, 전체 12개로 제한한다.
 - 먹지 않은 음식은 1200 ticks 후 제거한다.
-- 렌더링은 음식 수가 최대 3개인 작은 선형 loop 두 번으로 제한된다.
+- 렌더링은 음식 수가 Slugcat당 최대 5개인 작은 선형 loop 두 번으로 제한된다.
 - 움직이는 window surface의 delta를 음식에도 적용하여 창 이동 시 떠 있거나 뒤처지는 현상을 줄였다.
 
 ## 7. 테스트와 빌드
@@ -167,6 +176,10 @@
 - 들기, 세 번 bite, 1 food point 완료
 - 로컬 Rain World atlas의 `DangleFruit0/1/2A/B` 여섯 frame 존재
 - frame이 설치된 원본 `#rainWorld` atlas에서 왔는지 확인
+- EggBugEgg의 2 bites, radius, mass와 세 sprite layer
+- 140–360px 무작위 생성 범위와 바닥 위 낙하 시작
+- 다섯 번 연속 제안에서 섭취와 거절이 모두 발생하는지 확인
+- 최대 포만감 제한과 90초당 1점 소화
 
 검증 명령:
 
@@ -183,7 +196,9 @@
 - `8f71ba5` — `feat: add desktop Dangle Fruit edible model`
 - `586cc63` — `feat: add tray feeding and autonomous eating flow`
 - `7a78ead` — `feat: render food from local Rain World atlas`
-- 문서·최종 검증 커밋 — README, 본 보고서, atlas 회귀 검증과 최적화 정리
+- `f0469b8` — `docs: document food update and extension plan`
+- `f638d0f` — `feat: add Eggbug Eggs and appetite-driven feeding`
+- 후속 문서 커밋 — 색상 피드백, 두 번째 음식, 생성 거리와 포만감 설계 기록
 
 각 커밋은 `origin/feature/food-update`에 순차적으로 push했다.
 
@@ -201,7 +216,7 @@
 
 다음 후보 평가:
 
-- EggBugEgg: 비교적 단순한 edible이고 frame 확인이 쉬워 두 번째 후보로 적합
+- EggBugEgg: 두 번째 음식으로 구현 완료. 원작의 유연한 꼬리 mesh와 liquid drip은 후속 시각 개선 후보
 - Mushroom: 먹는 동작은 단순하지만 time slowdown을 데스크톱에서 어떻게 표현할지 제품 결정이 필요
 - Fly: creature AI, 날개 animation, capture, sound가 필요하므로 별도 creature 시스템 이후로 연기
 - WaterNut/JellyFish: 물, 전기, tentacle 의존성이 커서 현재 desktop terrain 모델과 맞지 않음
@@ -211,10 +226,11 @@
 
 ## 10. 알려진 제한과 다음 권장 작업
 
-- 음식은 같은 높이의 가까운 표면에 생성하도록 최적화되어 있다. 사용자가 창을 급격히 옮겨 먹이가 다른 층으로 떨어지면 Slugcat이 장거리 pathfinding을 하지 못할 수 있으며, 30초 후 자동 제거된다.
+- 사용자가 확인한 결과 현재 파란 열매가 인게임보다 연하고 하늘색에 가깝다. `SpriteRenderer.RenderFoods`의 고정 tint(`40,72,150` 및 `120,170,255`)가 원작 palette보다 밝은 것이 우선 의심된다. 이번 후속 작업에서는 비교를 위해 의도적으로 수정하지 않았으며, 알벌레 알과 나란히 확인한 뒤 원작 `DangleFruit.ApplyPalette`를 다시 추출해 별도 커밋으로 교정해야 한다.
+- 음식은 현재 Slugcat이 지지받는 같은 표면 또는 가까운 monitor floor에 생성하도록 최적화되어 있다. 사용자가 창을 급격히 옮겨 먹이가 다른 층으로 떨어지면 Slugcat이 장거리 pathfinding을 하지 못할 수 있으며, 30초 후 자동 제거된다.
 - 현재 들기 위치는 head 기반 mouth anchor다. 원작처럼 grasp별 손 animation을 완전히 재현하려면 `SlugcatGraphics`에 food hand target mode를 추가해야 한다.
 - bite event 이름은 남기지만 사운드는 재생하지 않는다. 프로젝트 전체 sound backend가 생길 때 event를 연결할 수 있다.
-- `FoodPointsEaten`은 세션 통계이며 저장하지 않는다. desktop pet에 영구 배고픔을 넣으면 방치형 사용에서 벌점이 되므로 별도 옵션으로 설계해야 한다.
+- 포만감은 세션 동안만 유지되고 앱을 다시 실행하면 공복으로 시작한다. 장기 저장은 방치형 사용에서 원치 않는 벌점이 될 수 있으므로 현재는 의도적으로 제외했다.
 - 실제 사용 피드백에서 트레이 단계가 번거롭다는 의견이 많을 경우에만 사용자가 직접 지정하는 optional hotkey를 설정 화면에 추가한다. 기본값은 계속 비활성으로 두는 것이 좋다.
 
 ## 11. 라이선스와 배포
