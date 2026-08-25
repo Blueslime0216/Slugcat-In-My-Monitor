@@ -18,6 +18,7 @@ namespace RainWorldDesktopPet.UI
     public sealed class LayeredOverlayWindow : Form
     {
         private const int MaximumSlugcats = 8;
+        private const int MaximumFoods = 12;
         private const int DefaultRenderFramesPerSecond = 60;
         private const int DefaultRenderIntervalMilliseconds =
             (1000 + DefaultRenderFramesPerSecond - 1) / DefaultRenderFramesPerSecond;
@@ -39,6 +40,9 @@ namespace RainWorldDesktopPet.UI
         private readonly ToolStripMenuItem spawnItem;
         private readonly ToolStripMenuItem removeItem;
         private readonly ToolStripMenuItem skinEditorItem;
+        private readonly ToolStripMenuItem foodMenu;
+        private readonly ToolStripMenuItem feedDangleFruitItem;
+        private readonly ToolStripMenuItem clearFoodsItem;
         private readonly List<GameLoop> gameLoops = new List<GameLoop>();
         private readonly SlugcatPose[] poseBuffer = new SlugcatPose[MaximumSlugcats];
         private readonly DirectCompositionHost.GpuSmokeEffect[] smokeEffectBuffer =
@@ -148,9 +152,21 @@ namespace RainWorldDesktopPet.UI
             activeSlugcatsMenu.DropDownItems.Add(nextItem);
             activeSlugcatsMenu.DropDownItems.Add(removeItem);
             activeSlugcatsMenu.DropDownItems.Add(new ToolStripSeparator());
+            foodMenu = new ToolStripMenuItem(T("먹이 주기", "Feed"));
+            feedDangleFruitItem = new ToolStripMenuItem(
+                T("파란 열매 주기", "Give Dangle Fruit"));
+            feedDangleFruitItem.Click += FeedDangleFruit;
+            clearFoodsItem = new ToolStripMenuItem(
+                T("선택한 슬러그캣의 먹이 치우기", "Clear Selected Slugcat's Food"));
+            clearFoodsItem.Click += ClearSelectedFoods;
+            foodMenu.DropDownItems.Add(feedDangleFruitItem);
+            foodMenu.DropDownItems.Add(new ToolStripSeparator());
+            foodMenu.DropDownItems.Add(clearFoodsItem);
+            foodMenu.DropDownOpening += RefreshFoodMenu;
             menu.Items.Add(settingsItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add(activeSlugcatsMenu);
+            menu.Items.Add(foodMenu);
             menu.Items.Add(slugcatMenu);
             menu.Items.Add(skinEditorItem);
             menu.Items.Add(debugItem);
@@ -693,6 +709,48 @@ namespace RainWorldDesktopPet.UI
             if (gameLoops.Count < 2) return;
             int index = gameLoops.IndexOf(gameLoop);
             SelectSlugcat(gameLoops[(index + 1) % gameLoops.Count]);
+        }
+
+        private void RefreshFoodMenu(object sender, EventArgs e)
+        {
+            int selectedIndex = gameLoop == null ? -1 : gameLoops.IndexOf(gameLoop);
+            int activeFoods = CountActiveFoods();
+            foodMenu.Text = selectedIndex < 0
+                ? T("먹이 주기", "Feed")
+                : T("먹이 주기 · 슬러그캣 ", "Feed · Slugcat ") + (selectedIndex + 1);
+            feedDangleFruitItem.Enabled = gameLoop != null &&
+                activeFoods < MaximumFoods &&
+                gameLoop.Foods.Foods.Count < DesktopFoodManager.MaximumActiveFoods;
+            clearFoodsItem.Enabled = gameLoop != null && gameLoop.Foods.Foods.Count > 0;
+        }
+
+        private void FeedDangleFruit(object sender, EventArgs e)
+        {
+            if (gameLoop == null) return;
+            if (CountActiveFoods() >= MaximumFoods || !gameLoop.FeedDangleFruit())
+            {
+                trayIcon.ShowBalloonTip(2500,
+                    T("먹이를 더 놓을 수 없습니다", "Food Limit Reached"),
+                    T("화면에는 총 " + MaximumFoods + "개, 슬러그캣 한 마리에는 " +
+                        DesktopFoodManager.MaximumActiveFoods + "개까지 놓을 수 있습니다.",
+                        "The desktop supports " + MaximumFoods + " foods total and " +
+                        DesktopFoodManager.MaximumActiveFoods + " per Slugcat."),
+                    ToolTipIcon.Info);
+            }
+        }
+
+        private void ClearSelectedFoods(object sender, EventArgs e)
+        {
+            if (gameLoop == null) return;
+            gameLoop.ClearFoods();
+        }
+
+        private int CountActiveFoods()
+        {
+            int count = 0;
+            for (int i = 0; i < gameLoops.Count; i++)
+                count += gameLoops[i].Foods.Foods.Count;
+            return count;
         }
 
         private void RemoveSelectedSlugcat(object sender, EventArgs e)

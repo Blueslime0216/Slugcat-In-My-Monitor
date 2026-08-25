@@ -62,6 +62,8 @@ namespace RainWorldDesktopPet.Tests
             Run("Desktop floor collision prevents tunneling", DesktopFloorCollision);
             Run("Dangle Fruit preserves the original three-bite edible contract",
                 DangleFruitPreservesOriginalEdibleContract);
+            Run("Food interaction seeks, reserves, and consumes through VirtualInput",
+                FoodInteractionUsesVirtualInputAndConsumes);
             Run("Each monitor contributes floor, taskbar, and exposed boundaries", MonitorTerrainTopologyIsExplicit);
             Run("Window-edge falls land on the first lower window", WindowEdgeFallLandsOnLowerWindow);
             Run("Window-edge falls with empty space land on monitor terrain", EmptyAreaFallLandsOnMonitorFloor);
@@ -389,6 +391,42 @@ namespace RainWorldDesktopPet.Tests
             True(fruit.State == DesktopFoodState.Consumed,
                 "the final bite consumes the item");
             True(!fruit.Bite(), "a consumed item cannot be bitten again");
+        }
+
+        private static void FoodInteractionUsesVirtualInputAndConsumes()
+        {
+            Slugcat slugcat = new Slugcat(new Vec2(100.0, 100.0));
+            SlugcatGraphics graphics = new SlugcatGraphics(slugcat);
+            DesktopFoodManager manager = new DesktopFoodManager();
+            AttentionSystem attention = new AttentionSystem();
+            VirtualInput input;
+
+            True(manager.TryAddDangleFruit(slugcat.Center + new Vec2(80.0, 0.0)),
+                "a fruit can be added to an empty manager");
+            True(manager.TryProduceInput(slugcat, graphics, attention, out input),
+                "an available fruit overrides autonomous input");
+            Equal(1, input.X, "the food controller walks toward the fruit");
+            True(manager.Target.State == DesktopFoodState.Claimed,
+                "the selected fruit is reserved by its owning Slugcat");
+            True(attention.Kind == AttentionKind.Food,
+                "food becomes the visible attention target");
+
+            manager.Clear();
+            slugcat.State.Grounded = true;
+            True(manager.TryAddDangleFruit(slugcat.Center + new Vec2(8.0, 0.0)),
+                "a reachable fruit can be added");
+            True(manager.TryProduceInput(slugcat, graphics, attention, out input),
+                "the reachable fruit owns the input tick");
+            True(manager.Target.State == DesktopFoodState.Held,
+                "the Slugcat picks up a fruit inside reach");
+
+            for (int tick = 0; tick < 80; tick++)
+                manager.StepInteraction(slugcat, graphics);
+            Equal(3, manager.TotalBites, "the interaction performs all three bites");
+            Equal(1, manager.FoodPointsEaten,
+                "the completed fruit grants its one original food point");
+            True(manager.InteractionState == FoodInteractionState.None,
+                "the controller releases the consumed target");
         }
 
         private static void FixedStepUsesFortyHertz()

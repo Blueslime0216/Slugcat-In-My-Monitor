@@ -54,6 +54,7 @@
     <Compile Include="AI\DesktopPetAI.cs" />
     <Compile Include="AI\UtilityEvaluator.cs" />
     <Compile Include="Core\FixedTimeStep.cs" />
+    <Compile Include="Core\DesktopFoodManager.cs" />
     <Compile Include="Core\GameLoop.cs" />
     <Compile Include="Core\DesktopWorldTransform.cs" />
     <Compile Include="Core\DesktopRecovery.cs" />

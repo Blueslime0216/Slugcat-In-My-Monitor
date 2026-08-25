@@ -1,0 +1,265 @@
+using System;
+using System.Collections.Generic;
+using RainWorldDesktopPet.AI;
+using RainWorldDesktopPet.Creature;
+using RainWorldDesktopPet.Desktop;
+using RainWorldDesktopPet.Graphics;
+using RainWorldDesktopPet.Physics;
+
+namespace RainWorldDesktopPet.Core
+{
+    public enum FoodInteractionState
+    {
+        None,
+        Seeking,
+        Holding,
+        Eating
+    }
+
+    // Food is owned by one GameLoop. That ownership is the reservation: two
+    // desktop pets never race for one item and no extra composition surface is
+    // needed. A future shared-food mode can replace this policy at this seam.
+    public sealed class DesktopFoodManager
+    {
+        public const int MaximumActiveFoods = 3;
+        private const double ApproachDistance = 17.0;
+        private const double PickupDistance = 25.0;
+        private const double PickupVerticalTolerance = 32.0;
+        private const int HoldBeforeBitingTicks = 8;
+        private const int BiteIntervalTicks = 18;
+
+        private readonly List<DesktopFood> foods = new List<DesktopFood>(MaximumActiveFoods);
+        private readonly IList<DesktopFood> foodView;
+        private DesktopFood target;
+        private int interactionCountdown;
+
+        public DesktopFoodManager()
+        {
+            foodView = foods.AsReadOnly();
+        }
+
+        public IList<DesktopFood> Foods { get { return foodView; } }
+        public DesktopFood Target { get { return target; } }
+        public FoodInteractionState InteractionState { get; private set; }
+        public int FoodPointsEaten { get; private set; }
+        public int TotalBites { get; private set; }
+        public string LastEvent { get; private set; }
+
+        public bool TryAddDangleFruit(Vec2 position)
+        {
+            RemoveInactive();
+            if (foods.Count >= MaximumActiveFoods) return false;
+            DesktopFood fruit = new DesktopFood(DesktopFoodKind.DangleFruit, position);
+            foods.Add(fruit);
+            LastEvent = "DangleFruit_Spawn";
+            return true;
+        }
+
+        public bool TrySpawnDangleFruit(Slugcat slugcat, DesktopCollisionWorld world)
+        {
+            if (slugcat == null || world == null) return false;
+            RemoveInactive();
+            if (foods.Count >= MaximumActiveFoods) return false;
+
+            double radius = 8.0;
+            double distance = DesktopWorldTransform.ToSimulationLength(58.0);
+            int facing = slugcat.State.Facing == 0 ? 1 : slugcat.State.Facing;
+            double x = slugcat.Center.X + facing * distance;
+            double y;
+            double left;
+            double right;
+            DesktopSurface surface;
+            if (slugcat.PrimarySupportingSurfaceId != 0 && world.TryGetSurface(
+                slugcat.PrimarySupportingSurfaceId, slugcat.PrimarySupportingSurfaceKind,
+                out surface) && surface.IsHorizontal)
+            {
+                left = surface.Left + radius + 3.0;
+                right = surface.Right - radius - 3.0;
+                y = surface.Top - radius;
+            }
+            else
+            {
+                MonitorInfo monitor = world.FindMonitor(slugcat.Center);
+                left = DesktopWorldTransform.ToSimulationLength(monitor.WorkArea.Left) +
+                    radius + 3.0;
+                right = DesktopWorldTransform.ToSimulationLength(monitor.WorkArea.Right) -
+                    radius - 3.0;
+                y = DesktopWorldTransform.ToSimulationLength(monitor.FloorY) - radius;
+            }
+
+            if (right <= left) return false;
+            x = MathUtil.Clamp(x, left, right);
+            if (Math.Abs(x - slugcat.Center.X) < ApproachDistance)
+            {
+                double opposite = MathUtil.Clamp(slugcat.Center.X - facing * distance,
+                    left, right);
+                if (Math.Abs(opposite - slugcat.Center.X) > Math.Abs(x - slugcat.Center.X))
+                    x = opposite;
+            }
+
+            DesktopFood fruit = new DesktopFood(DesktopFoodKind.DangleFruit,
+                new Vec2(x, y - 2.0));
+            fruit.SetCreationVelocity(new Vec2(facing * 0.45, -1.6));
+            foods.Add(fruit);
+            LastEvent = "DangleFruit_Spawn";
+            return true;
+        }
+
+        public void StepPhysics(DesktopCollisionWorld world)
+        {
+            RemoveInactive();
+            for (int i = 0; i < foods.Count; i++) foods[i].StepPhysics(world);
+            RemoveInactive();
+        }
+
+        public bool TryProduceInput(Slugcat slugcat, SlugcatGraphics graphics,
+            AttentionSystem attention, out VirtualInput input)
+        {
+            input = VirtualInput.Neutral;
+            if (slugcat == null || graphics == null) return false;
+            SelectTarget();
+            if (target == null)
+            {
+                InteractionState = FoodInteractionState.None;
+                return false;
+            }
+
+            if (slugcat.IsGrabbed || !slugcat.State.Conscious || slugcat.State.Dead ||
+                slugcat.State.StunCounter > 0)
+            {
+                DropTarget(slugcat);
+                return false;
+            }
+
+            if (attention != null)
+                attention.SetTarget(AttentionKind.Food, target.Chunk.Position);
+
+            if (target.State == DesktopFoodState.Held ||
+                target.State == DesktopFoodState.Biting)
+            {
+                InteractionState = target.State == DesktopFoodState.Biting
+                    ? FoodInteractionState.Eating : FoodInteractionState.Holding;
+                return true;
+            }
+
+            target.Claim();
+            InteractionState = FoodInteractionState.Seeking;
+            Vec2 offset = target.Chunk.Position - slugcat.Center;
+            if (Math.Abs(offset.X) > ApproachDistance)
+            {
+                input = new VirtualInput(offset.X < 0.0 ? -1 : 1, 0, false, false);
+                return true;
+            }
+
+            if (offset.Length <= PickupDistance &&
+                Math.Abs(offset.Y) <= PickupVerticalTolerance && slugcat.State.Grounded)
+            {
+                Vec2 mouth = MouthPosition(slugcat, graphics);
+                if (target.PickUp(mouth))
+                {
+                    interactionCountdown = HoldBeforeBitingTicks;
+                    InteractionState = FoodInteractionState.Holding;
+                    LastEvent = "DangleFruit_PickUp";
+                }
+            }
+            return true;
+        }
+
+        public void StepInteraction(Slugcat slugcat, SlugcatGraphics graphics)
+        {
+            if (target == null || !target.IsActive) return;
+            if (slugcat.IsGrabbed || !slugcat.State.Conscious || slugcat.State.Dead ||
+                slugcat.State.StunCounter > 0)
+            {
+                DropTarget(slugcat);
+                return;
+            }
+            if (target.State != DesktopFoodState.Held &&
+                target.State != DesktopFoodState.Biting) return;
+
+            target.HoldAt(MouthPosition(slugcat, graphics));
+            if (interactionCountdown > 0)
+            {
+                interactionCountdown--;
+                return;
+            }
+
+            if (target.State == DesktopFoodState.Held)
+            {
+                target.BeginBiting();
+                InteractionState = FoodInteractionState.Eating;
+                interactionCountdown = BiteIntervalTicks;
+                return;
+            }
+
+            if (!target.Bite()) return;
+            TotalBites++;
+            LastEvent = "DangleFruit_Bite";
+            if (target.State == DesktopFoodState.Consumed)
+            {
+                FoodPointsEaten += target.FoodPoints;
+                LastEvent = "DangleFruit_Eaten";
+                target = null;
+                InteractionState = FoodInteractionState.None;
+                return;
+            }
+            interactionCountdown = BiteIntervalTicks;
+        }
+
+        public void ApplyMovingSurfaceDelta(DesktopCollisionWorld world)
+        {
+            for (int i = 0; i < foods.Count; i++)
+                foods[i].ApplyMovingSurfaceDelta(world);
+        }
+
+        public void Clear()
+        {
+            foods.Clear();
+            target = null;
+            InteractionState = FoodInteractionState.None;
+            LastEvent = "Food_Clear";
+        }
+
+        private void SelectTarget()
+        {
+            if (target != null && target.IsActive) return;
+            target = null;
+            for (int i = 0; i < foods.Count; i++)
+            {
+                if (!foods[i].IsActive) continue;
+                target = foods[i];
+                break;
+            }
+        }
+
+        private void DropTarget(Slugcat slugcat)
+        {
+            if (target != null && (target.State == DesktopFoodState.Held ||
+                target.State == DesktopFoodState.Biting))
+            {
+                Vec2 velocity = slugcat.BodyChunks[0].Velocity * 0.5;
+                target.Drop(velocity);
+                LastEvent = "DangleFruit_Drop";
+            }
+            target = null;
+            interactionCountdown = 0;
+            InteractionState = FoodInteractionState.None;
+        }
+
+        private void RemoveInactive()
+        {
+            for (int i = foods.Count - 1; i >= 0; i--)
+            {
+                if (foods[i].IsActive) continue;
+                if (ReferenceEquals(foods[i], target)) target = null;
+                foods.RemoveAt(i);
+            }
+        }
+
+        private static Vec2 MouthPosition(Slugcat slugcat, SlugcatGraphics graphics)
+        {
+            int facing = slugcat.State.Facing == 0 ? 1 : slugcat.State.Facing;
+            return graphics.Head.Position + new Vec2(facing * 5.0, 1.5);
+        }
+    }
+}
