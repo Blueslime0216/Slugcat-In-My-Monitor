@@ -227,10 +227,14 @@
 - `cb06092` — `docs: record food palette correction`
 - `c217fcb` — 신규 4종 보고서 변경 revert
 - `96d9b85` — 신규 4종 구현 revert
+- `f8fd5d5` — `fix: stabilize two-food desktop interactions`
+- `d6e9b13` — 최신 `upstream/develop` 통합
 
 각 커밋은 `origin/feature/food-update`에 순차적으로 push했다.
 
 신규 4종 실험은 사용자 검토 결과 채택하지 않아 두 revert 커밋으로 완전히 취소했다. 현재 PR의 파일 변경 결과에는 `SlimeMold`, `DandelionPeach`, `GlowWeed`, `Mushroom` 코드와 UI가 남아 있지 않으며, 지원 범위는 파란 열매와 알벌레 알 2종뿐이다.
+
+PR 안정화 시점에는 저장소 규칙에 따라 `main`이 아니라 최신 `develop`을 기준으로 동기화했다. `upstream/develop` 대비 뒤처진 커밋은 0개이며 Release 전체 테스트, `node --check tools/validate-dms-template.mjs`, 배포 ZIP 생성과 SHA-256 생성까지 확인했다.
 
 ## 9. 새 음식 추가 방법
 
