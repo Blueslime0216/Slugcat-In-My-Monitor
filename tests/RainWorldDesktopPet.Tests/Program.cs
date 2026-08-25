@@ -198,7 +198,7 @@ namespace RainWorldDesktopPet.Tests
             else
             {
                 Run("Local embedded original atlas loads without DMS", delegate { EmbeddedOriginalAtlasLoads(localInstallation); });
-                Run("Local food atlas renders deep blue, cyan, and warm egg layers",
+                Run("Local food atlas renders all six food color families",
                     delegate { FoodAtlasRendersOriginalPalette(localInstallation); });
                 Run("Installed Workshop mods parse without loading their DLLs",
                     delegate { LocalWorkshopIntegrationsParse(localInstallation); });
@@ -691,20 +691,34 @@ namespace RainWorldDesktopPet.Tests
                 int cyanPixels = 0;
                 int warmPixels = 0;
                 int paleFruitPixels = 0;
+                int slimePixels = 0;
+                int peachPixels = 0;
+                int glowPixels = 0;
+                int mushroomPixels = 0;
                 for (int y = 0; y < bitmap.Height; y++)
                 {
                     for (int x = 0; x < bitmap.Width; x++)
                     {
                         Color color = bitmap.GetPixel(x, y);
                         if (color.A == 0) continue;
-                        if (color.B > 100 && color.B > color.R * 5 &&
+                        if (x < 150 && color.B > 100 && color.B > color.R * 5 &&
                             color.B > color.G * 5) deepBluePixels++;
-                        if (color.G > 140 && color.B > 100 &&
+                        if (x >= 170 && x < 250 && color.G > 140 && color.B > 100 &&
                             color.R < 60) cyanPixels++;
-                        if (color.R > 80 && color.R > color.G * 3 &&
+                        if (x >= 170 && x < 250 && color.R > 80 && color.R > color.G * 3 &&
                             color.R > color.B * 2) warmPixels++;
                         if (x < 150 && color.R > 70 && color.G > 100 &&
                             color.B > 180) paleFruitPixels++;
+                        if (x >= 275 && x < 365 && color.R > 150 &&
+                            color.R > color.G * 1.5 && color.G > color.B)
+                            slimePixels++;
+                        if (x >= 390 && x < 480 && color.B > color.R &&
+                            color.B > color.G) peachPixels++;
+                        if (x >= 500 && x < 590 && color.G > 180 &&
+                            color.R > 130 && color.B < 150) glowPixels++;
+                        if (x >= 610 && x < 710 && color.R >= 45 &&
+                            color.R < 110 && color.G >= 45 && color.G < 115 &&
+                            color.B >= 45 && color.B < 125) mushroomPixels++;
                     }
                 }
                 True(deepBluePixels > 20,
@@ -713,6 +727,13 @@ namespace RainWorldDesktopPet.Tests
                     "the real EggBugEgg atlas produces cyan and warm layers");
                 Equal(0, paleFruitPixels,
                     "the fruit region contains no former sky-blue tint");
+                True(slimePixels > 40, "Slime Mold renders warm orange layers");
+                True(peachPixels > 40,
+                    "Dandelion Peach renders its pale blue family");
+                True(glowPixels > 40,
+                    "Glow Weed renders its yellow-green family");
+                True(mushroomPixels > 40,
+                    "Mushroom renders its fog-colored cap and stalk");
             }
         }
 
