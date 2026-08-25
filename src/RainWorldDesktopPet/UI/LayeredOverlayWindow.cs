@@ -43,10 +43,6 @@ namespace RainWorldDesktopPet.UI
         private readonly ToolStripMenuItem foodMenu;
         private readonly ToolStripMenuItem feedDangleFruitItem;
         private readonly ToolStripMenuItem feedEggBugEggItem;
-        private readonly ToolStripMenuItem feedSlimeMoldItem;
-        private readonly ToolStripMenuItem feedDandelionPeachItem;
-        private readonly ToolStripMenuItem feedGlowWeedItem;
-        private readonly ToolStripMenuItem feedMushroomItem;
         private readonly ToolStripMenuItem fullnessStatusItem;
         private readonly ToolStripMenuItem clearFoodsItem;
         private readonly List<GameLoop> gameLoops = new List<GameLoop>();
@@ -165,19 +161,6 @@ namespace RainWorldDesktopPet.UI
             feedEggBugEggItem = new ToolStripMenuItem(
                 T("알벌레 알 주기", "Give Eggbug Egg"));
             feedEggBugEggItem.Click += FeedEggBugEgg;
-            feedSlimeMoldItem = new ToolStripMenuItem(
-                T("슬라임 몰드 주기", "Give Slime Mold"));
-            feedSlimeMoldItem.Click += delegate { FeedFood(DesktopFoodKind.SlimeMold); };
-            feedDandelionPeachItem = new ToolStripMenuItem(
-                T("민들레 복숭아 주기", "Give Dandelion Peach"));
-            feedDandelionPeachItem.Click += delegate
-                { FeedFood(DesktopFoodKind.DandelionPeach); };
-            feedGlowWeedItem = new ToolStripMenuItem(
-                T("발광초 주기", "Give Glow Weed"));
-            feedGlowWeedItem.Click += delegate { FeedFood(DesktopFoodKind.GlowWeed); };
-            feedMushroomItem = new ToolStripMenuItem(
-                T("버섯 주기", "Give Mushroom"));
-            feedMushroomItem.Click += delegate { FeedFood(DesktopFoodKind.Mushroom); };
             fullnessStatusItem = new ToolStripMenuItem();
             fullnessStatusItem.Enabled = false;
             clearFoodsItem = new ToolStripMenuItem(
@@ -185,10 +168,6 @@ namespace RainWorldDesktopPet.UI
             clearFoodsItem.Click += ClearSelectedFoods;
             foodMenu.DropDownItems.Add(feedDangleFruitItem);
             foodMenu.DropDownItems.Add(feedEggBugEggItem);
-            foodMenu.DropDownItems.Add(feedSlimeMoldItem);
-            foodMenu.DropDownItems.Add(feedDandelionPeachItem);
-            foodMenu.DropDownItems.Add(feedGlowWeedItem);
-            foodMenu.DropDownItems.Add(feedMushroomItem);
             foodMenu.DropDownItems.Add(new ToolStripSeparator());
             foodMenu.DropDownItems.Add(fullnessStatusItem);
             foodMenu.DropDownItems.Add(clearFoodsItem);
@@ -526,19 +505,10 @@ namespace RainWorldDesktopPet.UI
                 DesktopFood food = loop.Foods.Foods[i];
                 if (!food.IsActive) continue;
                 Vec2 center = food.Chunk.RenderPosition(pose.TimeStacker) * scale;
-                double reach = food.Definition.VisualReach * scale;
+                double reach = (food.Chunk.Radius + 4.0) * scale;
                 content = RectangleF.Union(content, new RectangleF(
                     (float)(center.X - reach), (float)(center.Y - reach),
                     (float)(reach * 2.0), (float)(reach * 2.0)));
-            }
-            if (loop.Foods.MushroomEffectActive)
-            {
-                Vec2 effectCenter = loop.Foods.MushroomEffectPosition * scale;
-                double effectReach = 40.0 * scale;
-                content = RectangleF.Union(content, new RectangleF(
-                    (float)(effectCenter.X - effectReach),
-                    (float)(effectCenter.Y - effectReach),
-                    (float)(effectReach * 2.0), (float)(effectReach * 2.0)));
             }
 
             int contentWidth = (int)Math.Ceiling(content.Width) + OverlayPadding * 2;
@@ -777,21 +747,11 @@ namespace RainWorldDesktopPet.UI
                 activeFoods < MaximumFoods &&
                 gameLoop.Foods.Foods.Count < DesktopFoodManager.MaximumActiveFoods;
             feedEggBugEggItem.Enabled = feedDangleFruitItem.Enabled;
-            feedSlimeMoldItem.Enabled = feedDangleFruitItem.Enabled;
-            feedDandelionPeachItem.Enabled = feedDangleFruitItem.Enabled;
-            feedGlowWeedItem.Enabled = feedDangleFruitItem.Enabled;
-            feedMushroomItem.Enabled = feedDangleFruitItem.Enabled;
             fullnessStatusItem.Text = gameLoop == null
                 ? T("포만감 -", "Fullness -")
                 : T("포만감 ", "Fullness ") +
                     gameLoop.Foods.Fullness.ToString("0.0") + "/" +
-                    DesktopFoodManager.MaximumFullness.ToString("0.0") +
-                    (gameLoop.Foods.MushroomEffectActive
-                        ? T(" · 버섯 효과 ", " · Mushroom ") +
-                            (gameLoop.Foods.MushroomEffectTicksRemaining /
-                                (double)SimulationConstants.LogicTicksPerSecond).
-                                ToString("0.0") + T("초", "s")
-                        : string.Empty);
+                    DesktopFoodManager.MaximumFullness.ToString("0.0");
             clearFoodsItem.Enabled = gameLoop != null && gameLoop.Foods.Foods.Count > 0;
         }
 
@@ -809,7 +769,9 @@ namespace RainWorldDesktopPet.UI
         {
             if (gameLoop == null) return;
             bool spawned = CountActiveFoods() < MaximumFoods &&
-                gameLoop.FeedFood(kind);
+                (kind == DesktopFoodKind.EggBugEgg
+                    ? gameLoop.FeedEggBugEgg()
+                    : gameLoop.FeedDangleFruit());
             if (!spawned)
             {
                 trayIcon.ShowBalloonTip(2500,

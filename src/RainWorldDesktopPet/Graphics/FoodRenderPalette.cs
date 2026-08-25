@@ -73,52 +73,6 @@ namespace RainWorldDesktopPet.Graphics
                 LerpColor(eyeBase, darkBase, 0.5 + 0.5 * darkness));
         }
 
-        internal static FoodLayerPalette SlimeMold
-        {
-            get
-            {
-                double hue = MathUtil.Lerp(0.07, 0.05, ReferenceDarkness);
-                Color slime = HslToRgb(hue, 1.0, 0.55);
-                slime = LerpColor(slime, DesktopFog,
-                    MathUtil.Lerp(0.25, 0.35, 0.3) *
-                    MathUtil.Lerp(0.1, 1.0, ReferenceDarkness));
-                return new FoodLayerPalette(DesktopBlack, slime,
-                    LerpColor(slime, Color.White, 0.55));
-            }
-        }
-
-        internal static FoodLayerPalette DandelionPeach
-        {
-            get
-            {
-                Color peach = LerpColor(Color.FromArgb(255, 150, 199, 245),
-                    DesktopBlack, ReferenceDarkness * ReferenceDarkness);
-                Color puff = LerpColor(DesktopFog, Color.White, 0.5);
-                puff = LerpColor(puff, DesktopBlack, ReferenceDarkness);
-                return new FoodLayerPalette(peach, puff,
-                    LerpColor(peach, puff, 0.3));
-            }
-        }
-
-        internal static FoodLayerPalette GlowWeed
-        {
-            get
-            {
-                Color glow = Color.FromArgb(255, 204, 255, 102);
-                return new FoodLayerPalette(
-                    LerpColor(Color.FromArgb(255, 35, 120, 145),
-                        Color.FromArgb(255, 50, 175, 115), 0.5),
-                    glow, LerpColor(glow, Color.Black, 0.4));
-            }
-        }
-
-        internal static FoodLayerPalette Mushroom(double hue)
-        {
-            Color effect = HslToRgb(hue, 0.72, 0.58);
-            return new FoodLayerPalette(LerpColor(DesktopBlack, DesktopFog, 0.5),
-                DesktopFog, effect);
-        }
-
         private static double InverseLerp(double from, double to, double value)
         {
             if (Math.Abs(to - from) < 0.000001) return 0.0;

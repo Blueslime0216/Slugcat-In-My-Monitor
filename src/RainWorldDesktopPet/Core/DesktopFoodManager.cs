@@ -36,8 +36,6 @@ namespace RainWorldDesktopPet.Core
         private DesktopFood target;
         private int interactionCountdown;
         private double fullness;
-        private int mushroomEffectTicksRemaining;
-        private Vec2 mushroomEffectPosition;
 
         public DesktopFoodManager()
             : this(Environment.TickCount)
@@ -59,39 +57,25 @@ namespace RainWorldDesktopPet.Core
         public bool LastSpawnAccepted { get; private set; }
         public double Fullness { get { return fullness; } }
         public double FullnessRatio { get { return fullness / MaximumFullness; } }
-        public int MushroomEffectTicksRemaining
-        {
-            get { return mushroomEffectTicksRemaining; }
-        }
-        public bool MushroomEffectActive
-        {
-            get { return mushroomEffectTicksRemaining > 0; }
-        }
-        public Vec2 MushroomEffectPosition { get { return mushroomEffectPosition; } }
-        public double MushroomEffectIntensity
-        {
-            get { return MathUtil.Clamp01(mushroomEffectTicksRemaining / 80.0); }
-        }
 
         public bool TryAddDangleFruit(Vec2 position)
         {
-            return TryAddFood(DesktopFoodKind.DangleFruit, position);
+            RemoveInactive();
+            if (foods.Count >= MaximumActiveFoods) return false;
+            DesktopFood fruit = new DesktopFood(DesktopFoodKind.DangleFruit, position);
+            foods.Add(fruit);
+            LastEvent = "DangleFruit_Spawn";
+            return true;
         }
 
         public bool TryAddEggBugEgg(Vec2 position)
         {
-            return TryAddFood(DesktopFoodKind.EggBugEgg, position);
-        }
-
-        public bool TryAddFood(DesktopFoodKind kind, Vec2 position)
-        {
             RemoveInactive();
             if (foods.Count >= MaximumActiveFoods) return false;
-            double variant = random.NextDouble();
-            DesktopFood food = new DesktopFood(kind, position,
-                CreateVisualHue(kind, variant), variant);
-            foods.Add(food);
-            LastEvent = kind + "_Spawn";
+            DesktopFood egg = new DesktopFood(DesktopFoodKind.EggBugEgg, position,
+                FoodRenderPalette.CreateNormalEggHue(random));
+            foods.Add(egg);
+            LastEvent = "EggBugEgg_Spawn";
             return true;
         }
 
@@ -105,21 +89,14 @@ namespace RainWorldDesktopPet.Core
             return TrySpawnFood(DesktopFoodKind.EggBugEgg, slugcat, world);
         }
 
-        public bool TrySpawnFood(DesktopFoodKind kind, Slugcat slugcat,
-            DesktopCollisionWorld world)
-        {
-            return TrySpawnFoodCore(kind, slugcat, world);
-        }
-
-        private bool TrySpawnFoodCore(DesktopFoodKind kind, Slugcat slugcat,
+        private bool TrySpawnFood(DesktopFoodKind kind, Slugcat slugcat,
             DesktopCollisionWorld world)
         {
             if (slugcat == null || world == null) return false;
             RemoveInactive();
             if (foods.Count >= MaximumActiveFoods) return false;
 
-            DesktopFoodDefinition definition = DesktopFoodDefinitions.Get(kind);
-            double radius = definition.Radius;
+            double radius = kind == DesktopFoodKind.EggBugEgg ? 4.6 : 8.0;
             double minimumDistance = DesktopWorldTransform.ToSimulationLength(140.0);
             double maximumDistance = DesktopWorldTransform.ToSimulationLength(360.0);
             double distance = MathUtil.Lerp(minimumDistance, maximumDistance,
@@ -161,10 +138,10 @@ namespace RainWorldDesktopPet.Core
 
             double dropHeight = DesktopWorldTransform.ToSimulationLength(
                 MathUtil.Lerp(45.0, 120.0, random.NextDouble()));
-            double visualVariant = random.NextDouble();
-            double visualHue = CreateVisualHue(kind, visualVariant);
+            double visualHue = kind == DesktopFoodKind.EggBugEgg
+                ? FoodRenderPalette.CreateNormalEggHue(random) : 0.0;
             DesktopFood food = new DesktopFood(kind,
-                new Vec2(x, y - dropHeight), visualHue, visualVariant);
+                new Vec2(x, y - dropHeight), visualHue);
             food.SetCreationVelocity(new Vec2(direction *
                 MathUtil.Lerp(0.15, 0.75, random.NextDouble()), 0.0));
             foods.Add(food);
@@ -175,19 +152,9 @@ namespace RainWorldDesktopPet.Core
             return true;
         }
 
-        private double CreateVisualHue(DesktopFoodKind kind, double variant)
-        {
-            if (kind == DesktopFoodKind.EggBugEgg)
-                return FoodRenderPalette.CreateNormalEggHue(random);
-            if (kind == DesktopFoodKind.Mushroom)
-                return MathUtil.Lerp(0.25, 0.75, variant);
-            return 0.0;
-        }
-
         public void StepPhysics(DesktopCollisionWorld world)
         {
             StepMetabolism();
-            if (mushroomEffectTicksRemaining > 0) mushroomEffectTicksRemaining--;
             RemoveInactive();
             for (int i = 0; i < foods.Count; i++) foods[i].StepPhysics(world);
             RemoveInactive();
@@ -254,8 +221,6 @@ namespace RainWorldDesktopPet.Core
 
         public void StepInteraction(Slugcat slugcat, SlugcatGraphics graphics)
         {
-            if (MushroomEffectActive && slugcat != null)
-                mushroomEffectPosition = slugcat.Center;
             if (target == null || !target.IsActive) return;
             if (slugcat.IsGrabbed || !slugcat.State.Conscious || slugcat.State.Dead ||
                 slugcat.State.StunCounter > 0)
@@ -289,7 +254,6 @@ namespace RainWorldDesktopPet.Core
                 FoodPointsEaten += target.FoodPoints;
                 fullness = Math.Min(MaximumFullness,
                     fullness + target.FoodPoints);
-                ActivateEffect(target, slugcat);
                 LastEvent = FoodEventName(target, "Eaten");
                 target = null;
                 InteractionState = FoodInteractionState.None;
@@ -302,11 +266,6 @@ namespace RainWorldDesktopPet.Core
         {
             for (int i = 0; i < foods.Count; i++)
                 foods[i].ApplyMovingSurfaceDelta(world);
-        }
-
-        public bool ShouldSkipMushroomSimulation(long simulationTick)
-        {
-            return MushroomEffectActive && simulationTick % 3 == 2;
         }
 
         public void Clear()
@@ -368,14 +327,6 @@ namespace RainWorldDesktopPet.Core
             if (food.State == DesktopFoodState.Ignored) return false;
             if (food.State != DesktopFoodState.Free) return true;
 
-            if (food.Definition.EffectKind == DesktopFoodEffectKind.Mushroom)
-            {
-                bool wantsEffect = !MushroomEffectActive;
-                if (wantsEffect) food.Claim();
-                else food.Ignore();
-                return wantsEffect;
-            }
-
             double projected = ProjectedFullness();
             bool accepted;
             if (projected <= 0.001)
@@ -416,14 +367,6 @@ namespace RainWorldDesktopPet.Core
         private static string FoodEventName(DesktopFood food, string action)
         {
             return food.Kind + "_" + action;
-        }
-
-        private void ActivateEffect(DesktopFood food, Slugcat slugcat)
-        {
-            if (food.Definition.EffectKind != DesktopFoodEffectKind.Mushroom) return;
-            mushroomEffectTicksRemaining = food.Definition.EffectDurationTicks;
-            mushroomEffectPosition = slugcat == null
-                ? food.Chunk.Position : slugcat.Center;
         }
     }
 }

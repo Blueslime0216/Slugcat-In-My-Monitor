@@ -56,7 +56,6 @@ namespace RainWorldDesktopPet.Graphics
         private readonly PointF[] abilityQuad = new PointF[4];
         private readonly PointF[] abilityTriangle = new PointF[3];
         private readonly PointF[] eggTailPoints = new PointF[12];
-        private readonly PointF[] mushroomStalkPoints = new PointF[12];
         private readonly Bitmap tailRaster;
         private readonly System.Drawing.Graphics tailRasterGraphics;
         private readonly Bitmap flatLightShaderMask;
@@ -1116,8 +1115,7 @@ namespace RainWorldDesktopPet.Graphics
             DesktopFoodManager foodManager, RenderSpace renderSpace,
             double characterRenderScale, double interpolation, bool heldLayer)
         {
-            if (foodManager == null || (foodManager.Foods.Count == 0 &&
-                !foodManager.MushroomEffectActive)) return;
+            if (foodManager == null || foodManager.Foods.Count == 0) return;
             GraphicsState state = graphics.Save();
             try
             {
@@ -1127,16 +1125,6 @@ namespace RainWorldDesktopPet.Graphics
                     (float)-renderSpace.WorldOrigin.Y))
                 {
                     graphics.Transform = transform;
-                }
-
-                if (!heldLayer && foodManager.MushroomEffectActive)
-                {
-                    double pulse = 0.88 + 0.12 * Math.Sin(
-                        foodManager.MushroomEffectTicksRemaining * 0.12);
-                    DrawEffectShaderSprite(graphics, flatLightShaderMask,
-                        foodManager.MushroomEffectPosition, 0.0, 76.0 * pulse,
-                        Color.FromArgb((int)Math.Round(42.0 *
-                            foodManager.MushroomEffectIntensity), 126, 176, 255));
                 }
 
                 for (int i = 0; i < foodManager.Foods.Count; i++)
@@ -1154,26 +1142,6 @@ namespace RainWorldDesktopPet.Graphics
                     if (food.Kind == DesktopFoodKind.EggBugEgg)
                     {
                         DrawEggBugEgg(graphics, food, center, direction, angle);
-                        continue;
-                    }
-                    if (food.Kind == DesktopFoodKind.SlimeMold)
-                    {
-                        DrawSlimeMold(graphics, food, center, angle);
-                        continue;
-                    }
-                    if (food.Kind == DesktopFoodKind.DandelionPeach)
-                    {
-                        DrawDandelionPeach(graphics, food, center, direction, angle);
-                        continue;
-                    }
-                    if (food.Kind == DesktopFoodKind.GlowWeed)
-                    {
-                        DrawGlowWeed(graphics, food, center, direction, angle);
-                        continue;
-                    }
-                    if (food.Kind == DesktopFoodKind.Mushroom)
-                    {
-                        DrawMushroom(graphics, food, center, direction, angle);
                         continue;
                     }
                     AtlasSprite ignored;
@@ -1202,159 +1170,6 @@ namespace RainWorldDesktopPet.Graphics
             {
                 graphics.Restore(state);
             }
-        }
-
-        private void DrawSlimeMold(System.Drawing.Graphics graphics,
-            DesktopFood food, Vec2 center, double angle)
-        {
-            FoodLayerPalette palette = FoodRenderPalette.SlimeMold;
-            double biteScale = MathUtil.Lerp(0.72, 1.0,
-                food.BitesRemaining / (double)food.InitialBites);
-            AtlasSprite ignored;
-            if (atlas != null && atlas.TryGet(food.FrontElement, out ignored))
-                DrawElement(graphics, food.FrontElement, center, angle + 180.0,
-                    0.72 * biteScale, 0.72 * biteScale, 0.5, 0.5,
-                    palette.PrimaryColor);
-            else
-                FillCachedCircle(graphics, center, 5.0 * biteScale,
-                    palette.PrimaryColor);
-
-            for (int i = 0; i < food.DecorationCount; i++)
-            {
-                double seed = food.VisualVariant * 17.0 + i * 2.399963;
-                double distance = (5.0 + 8.5 * Fract(Math.Sin(seed * 9.17) *
-                    43758.5453)) * biteScale;
-                Vec2 point = center + new Vec2(Math.Cos(seed), Math.Sin(seed)) *
-                    distance;
-                double radius = (0.8 + 1.2 * Fract(Math.Sin(seed * 4.73) *
-                    15731.743)) * biteScale;
-                FillCachedCircle(graphics, point, radius, palette.PrimaryColor);
-                if ((i & 2) == 0)
-                    FillCachedCircle(graphics, point + new Vec2(-0.35, -0.35),
-                        radius * 0.28, palette.DetailColor);
-            }
-        }
-
-        private void DrawDandelionPeach(System.Drawing.Graphics graphics,
-            DesktopFood food, Vec2 center, Vec2 direction, double angle)
-        {
-            FoodLayerPalette palette = FoodRenderPalette.DandelionPeach;
-            double biteScale = MathUtil.Lerp(0.72, 1.0,
-                food.BitesRemaining / (double)food.InitialBites);
-            Vec2 axis = direction.LengthSquared < 0.000001
-                ? Vec2.Down : direction.Normalized;
-            Vec2 perpendicular = new Vec2(-axis.Y, axis.X);
-            AtlasSprite ignored;
-            if (atlas != null && atlas.TryGet(food.BackElement, out ignored))
-                DrawElement(graphics, food.BackElement, center, angle,
-                    0.92 * biteScale, 1.11 * biteScale, 0.5, 0.5,
-                    palette.PrimaryColor);
-            if (atlas != null && atlas.TryGet(food.FrontElement, out ignored))
-                DrawElement(graphics, food.FrontElement, center, angle,
-                    0.92 * biteScale, 1.11 * biteScale, 0.5, 0.5,
-                    Color.FromArgb(153, palette.BaseColor));
-            if (atlas != null && atlas.TryGet(food.DetailElement, out ignored))
-                DrawElement(graphics, food.DetailElement, center + axis * 7.0,
-                    angle, 0.55, 4.0 * biteScale, 0.5, 0.5,
-                    palette.DetailColor);
-
-            for (int i = 0; i < food.DecorationCount; i++)
-            {
-                double spread = (i - (food.DecorationCount - 1) * 0.5) * 2.4;
-                double flutter = Math.Sin((food.AgeTicks + i * 13) * 0.07) * 0.8;
-                Vec2 puff = center - axis * (7.0 + (i & 1) * 2.0) +
-                    perpendicular * (spread + flutter);
-                DrawElement(graphics, "SkyDandelion", puff, angle + i * 37.0,
-                    0.43, 0.43, 0.5, 0.5,
-                    Color.FromArgb(MathUtil.Clamp(204 - i * 10, 128, 204),
-                        palette.PrimaryColor));
-            }
-        }
-
-        private void DrawGlowWeed(System.Drawing.Graphics graphics,
-            DesktopFood food, Vec2 center, Vec2 direction, double angle)
-        {
-            FoodLayerPalette palette = FoodRenderPalette.GlowWeed;
-            double biteScale = MathUtil.Lerp(0.72, 1.0,
-                food.BitesRemaining / (double)food.InitialBites);
-            double pulse = 0.92 + 0.08 * Math.Sin(
-                food.AgeTicks * 0.09 + food.VisualVariant * 6.28);
-            DrawEffectShaderSprite(graphics, lightSourceShaderMask, center, 0.0,
-                MathUtil.Lerp(30.0, 48.0, food.VisualVariant) * pulse,
-                Color.FromArgb(48, palette.PrimaryColor));
-            AtlasSprite ignored;
-            if (atlas != null && atlas.TryGet(food.BackElement, out ignored))
-                DrawElement(graphics, food.BackElement, center, angle,
-                    0.9 * biteScale, 1.3 * biteScale, 0.5, 0.5,
-                    palette.BaseColor);
-            if (atlas != null && atlas.TryGet(food.FrontElement, out ignored))
-                DrawElement(graphics, food.FrontElement, center, angle,
-                    0.9 * biteScale, 1.3 * biteScale, 0.5, 0.5,
-                    palette.PrimaryColor);
-            if (atlas != null && atlas.TryGet(food.DetailElement, out ignored))
-            {
-                DrawElement(graphics, food.DetailElement, center, angle,
-                    1.1 * biteScale, -1.4 * biteScale, 0.5, 0.5,
-                    palette.DetailColor);
-                DrawElement(graphics, food.DetailElement, center, angle,
-                    1.1 * biteScale, 1.4 * biteScale, 0.5, 0.5,
-                    palette.DetailColor);
-            }
-            else
-            {
-                FillCachedCircle(graphics, center, 7.0 * biteScale,
-                    palette.PrimaryColor);
-                FillCachedCircle(graphics, center - direction * 2.0,
-                    2.2 * biteScale, Color.White);
-            }
-        }
-
-        private void DrawMushroom(System.Drawing.Graphics graphics,
-            DesktopFood food, Vec2 center, Vec2 direction, double angle)
-        {
-            FoodLayerPalette palette = FoodRenderPalette.Mushroom(food.VisualHue);
-            Vec2 axis = direction.LengthSquared < 0.000001
-                ? Vec2.Down : direction.Normalized;
-            Vec2 perpendicular = new Vec2(-axis.Y, axis.X);
-            DrawEffectShaderSprite(graphics, flatLightShaderMask,
-                center - axis * 4.0, 0.0, 28.0,
-                Color.FromArgb(24, palette.DetailColor));
-            for (int i = 0; i < 6; i++)
-            {
-                double progress = i / 5.0;
-                Vec2 point = center - axis * 1.0 + axis * (progress * 11.0) +
-                    perpendicular * Math.Sin((food.VisualVariant * 5.0 + i) *
-                        1.7) * 0.45;
-                double width = MathUtil.Lerp(2.2, 0.7, progress);
-                mushroomStalkPoints[i] = (point + perpendicular * width).ToPointF();
-                mushroomStalkPoints[mushroomStalkPoints.Length - 1 - i] =
-                    (point - perpendicular * width).ToPointF();
-            }
-            graphics.FillPolygon(GetBodyBrush(palette.BaseColor), mushroomStalkPoints);
-            AtlasSprite ignored;
-            Vec2 cap = center - axis * 4.0;
-            if (atlas != null && atlas.TryGet(food.FrontElement, out ignored))
-                DrawElement(graphics, food.FrontElement, cap, angle,
-                    1.0, 1.0, 0.5, 0.62, palette.PrimaryColor);
-            else
-            {
-                FillCachedCircle(graphics, cap, 5.5, palette.PrimaryColor);
-                FillCachedCircle(graphics, cap - perpendicular * 1.5, 1.0,
-                    palette.DetailColor);
-            }
-        }
-
-        private void FillCachedCircle(System.Drawing.Graphics graphics,
-            Vec2 center, double radius, Color color)
-        {
-            graphics.FillEllipse(GetBodyBrush(color),
-                (float)(center.X - radius), (float)(center.Y - radius),
-                (float)(radius * 2.0), (float)(radius * 2.0));
-        }
-
-        private static double Fract(double value)
-        {
-            return value - Math.Floor(value);
         }
 
         private void DrawEggBugEgg(System.Drawing.Graphics graphics, DesktopFood food,

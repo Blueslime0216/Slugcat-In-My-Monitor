@@ -93,7 +93,6 @@
     <Compile Include="Physics\DesktopCollisionSnapshot.cs" />
     <Compile Include="Physics\DesktopCollisionWorld.cs" />
     <Compile Include="Physics\DesktopFood.cs" />
-    <Compile Include="Physics\DesktopFoodDefinition.cs" />
     <Compile Include="Physics\DesktopSpear.cs" />
     <Compile Include="Physics\DesktopRope.cs" />
     <Compile Include="Physics\TerrainImpactData.cs" />

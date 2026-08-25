@@ -7,11 +7,7 @@ namespace RainWorldDesktopPet.Physics
     public enum DesktopFoodKind
     {
         DangleFruit,
-        EggBugEgg,
-        SlimeMold,
-        DandelionPeach,
-        GlowWeed,
-        Mushroom
+        EggBugEgg
     }
 
     public enum DesktopFoodState
@@ -30,12 +26,20 @@ namespace RainWorldDesktopPet.Physics
     // importing Room/AbstractPhysicalObject/Creature graphs into the overlay.
     public sealed class DesktopFood
     {
+        private static readonly string[] FrontElements =
+            { "DangleFruit0A", "DangleFruit1A", "DangleFruit2A" };
+        private static readonly string[] BackElements =
+            { "DangleFruit0B", "DangleFruit1B", "DangleFruit2B" };
         public const int DangleFruitInitialBites = 3;
         public const int DangleFruitFoodPoints = 1;
         public const int EggBugEggInitialBites = 2;
         public const int EggBugEggFoodPoints = 1;
         public const int DefaultLifetimeTicks = 1200;
 
+        private const double Gravity = 0.9;
+        private const double AirFriction = 0.999;
+        private const double SurfaceFriction = 0.7;
+        private const double Bounce = 0.2;
         private Vec2 rotation;
         private Vec2 lastRotation;
 
@@ -45,38 +49,26 @@ namespace RainWorldDesktopPet.Physics
         }
 
         public DesktopFood(DesktopFoodKind kind, Vec2 position, double visualHue)
-            : this(kind, position, visualHue, visualHue)
-        {
-        }
-
-        public DesktopFood(DesktopFoodKind kind, Vec2 position, double visualHue,
-            double visualVariant)
         {
             Kind = kind;
-            Definition = DesktopFoodDefinitions.Get(kind);
-            Chunk = new BodyChunk(0, position, Definition.Radius,
-                Definition.Mass);
+            bool egg = kind == DesktopFoodKind.EggBugEgg;
+            Chunk = new BodyChunk(0, position, egg ? 4.6 : 8.0, 0.2);
             State = DesktopFoodState.Free;
-            InitialBites = Definition.InitialBites;
+            InitialBites = egg ? EggBugEggInitialBites : DangleFruitInitialBites;
             BitesRemaining = InitialBites;
-            FoodPoints = Definition.FoodPoints;
+            FoodPoints = egg ? EggBugEggFoodPoints : DangleFruitFoodPoints;
             VisualHue = visualHue - Math.Floor(visualHue);
-            VisualVariant = MathUtil.Clamp01(visualVariant);
-            DecorationCount = Definition.DecorationCount(VisualVariant);
             rotation = Vec2.Down;
             lastRotation = rotation;
         }
 
         public DesktopFoodKind Kind { get; private set; }
-        public DesktopFoodDefinition Definition { get; private set; }
         public readonly BodyChunk Chunk;
         public DesktopFoodState State { get; private set; }
         public int InitialBites { get; private set; }
         public int BitesRemaining { get; private set; }
         public int FoodPoints { get; private set; }
         public double VisualHue { get; private set; }
-        public double VisualVariant { get; private set; }
-        public int DecorationCount { get; private set; }
         public int AgeTicks { get; private set; }
         public Vec2 Rotation { get { return rotation; } }
         public Vec2 LastRotation { get { return lastRotation; } }
@@ -103,15 +95,25 @@ namespace RainWorldDesktopPet.Physics
         }
         public string FrontElement
         {
-            get { return Definition.FrontElement(SpriteFrame); }
+            get
+            {
+                return Kind == DesktopFoodKind.EggBugEgg
+                    ? (SpriteFrame == 0 ? "DangleFruit0A" : "DangleFruit1A")
+                    : FrontElements[SpriteFrame];
+            }
         }
         public string BackElement
         {
-            get { return Definition.BackElement(SpriteFrame); }
+            get
+            {
+                return Kind == DesktopFoodKind.EggBugEgg
+                    ? (SpriteFrame == 0 ? "EggBugEggColor" : "EggBugEggColorEaten")
+                    : BackElements[SpriteFrame];
+            }
         }
         public string DetailElement
         {
-            get { return Definition.DetailElement(SpriteFrame); }
+            get { return Kind == DesktopFoodKind.EggBugEgg ? "JetFishEyeA" : null; }
         }
 
         public void SetCreationVelocity(Vec2 velocity)
@@ -193,12 +195,8 @@ namespace RainWorldDesktopPet.Physics
 
             lastRotation = rotation;
             Chunk.BeginTick();
-            Chunk.Integrate(Definition.Gravity, Definition.AirFriction);
-            if (Definition.DriftStrength > 0.0)
-                Chunk.Velocity.X += Math.Sin(AgeTicks * 0.075 +
-                    VisualVariant * Math.PI * 2.0) * Definition.DriftStrength;
-            world.Resolve(Chunk, world.CurrentSnapshot, 0,
-                Definition.SurfaceFriction, Definition.Bounce);
+            Chunk.Integrate(Gravity, AirFriction);
+            world.Resolve(Chunk, world.CurrentSnapshot, 0, SurfaceFriction, Bounce);
             if (Chunk.Velocity.LengthSquared > 0.05)
                 rotation = Chunk.Velocity.Normalized;
         }
