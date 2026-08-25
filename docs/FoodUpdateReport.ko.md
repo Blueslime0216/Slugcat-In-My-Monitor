@@ -23,7 +23,8 @@
 포함된 기능:
 
 - `DangleFruit` 물리 객체
-- `EggBugEgg` 물리 객체와 원본 3-layer sprite 조합
+- `EggBugEgg` 물리 객체, 원본 3-layer sprite 조합과 5구간 꼬리 mesh
+- 원작 `ApplyPalette`를 재현하는 음식 전용 desktop palette
 - 자유, 예약, 들기, 먹는 중, 소비, 만료 상태
 - 원작의 3 bites와 1 food point 계약
 - 원작에 대응하는 반지름 8, 질량 0.2, 중력 0.9, air friction 0.999, surface friction 0.7, bounce 0.2
@@ -65,7 +66,11 @@
 
 원작 Player의 섭취 흐름은 개념적으로 `GrabUpdate → BiteEdibleObject → ObjectEaten → AddFood/AddQuarterFood`다. `DangleFruit`는 `PlayerCarryableItem` 기반의 한 개 BodyChunk 아이템이고, 초기 bites는 3, food points는 1, automatic pickup은 true다. 마지막 bite에서 `ObjectEaten`을 호출하고 grasp를 해제한 뒤 아이템이 소멸한다.
 
-`EggBugEgg`도 한 개 BodyChunk를 사용하며 초기 bites는 2, food points는 1이다. 기본 swell 상태의 반지름은 약 4.6, 질량은 0.2다. 원작은 `DangleFruit0A/1A`, `EggBugEggColor/EggBugEggColorEaten`, `JetFishEyeA`를 겹쳐 그리고 작은 유연한 mesh를 덧붙인다. 데스크톱 구현은 비교에 중요한 세 atlas layer와 bite 교체를 보존하고, room physics에 의존하는 mesh와 liquid drip particle은 제외했다.
+`EggBugEgg`도 한 개 BodyChunk를 사용하며 초기 bites는 2, food points는 1이다. 기본 swell 상태의 반지름은 약 4.6, 질량은 0.2다. 원작은 `DangleFruit0A/1A`, `EggBugEggColor/EggBugEggColorEaten`, `JetFishEyeA`를 겹쳐 그리고 5구간의 유연한 mesh를 덧붙인다. 데스크톱 구현은 세 atlas layer와 bite 교체를 보존하고, 원작 segment 수와 길이를 기준으로 가벼운 5구간 꼬리 mesh를 그린다. 방의 충돌과 particle system이 필요한 liquid drip만 제외했다.
+
+사용자 스크린샷을 기준으로 원본 DLL의 색상 경로를 다시 조사했다. `DangleFruit.ApplyPalette`는 A 레이어를 `RoomPalette.blackColor`, B 레이어를 순청색 `(0, 0, 1)`과 `blackColor`의 darkness 혼합색으로 설정한다. 기존 데스크톱 코드는 B를 어둡게 그리고 A를 밝은 하늘색으로 덮어 레이어 역할과 순서가 모두 반대였다. 수정 후에는 A를 먼저 검은 외곽색으로, B를 나중에 짙은 포화 청색으로 그린다.
+
+일반 `EggBug`의 hue는 전체 색상환의 균등 난수가 아니다. 개체 `EntityID` 시드로 `ClampedRandomVariation(0.5, 0.5, 2)`를 계산한 뒤 `-0.15–0.10` 범위로 보간하며, 떨어진 알은 부모의 hue를 상속한다. 기존 구현의 `Random.NextDouble()`은 `0–1` 전체를 사용했기 때문에 원작 일반 알벌레 분포와 무관한 조합이 대부분이었고, 낮은 확률로만 원작과 비슷해졌다. 현재 구현은 원작의 제한 범위와 S-curve 분포를 재현한다. 최종 shell, liquid, detail 색도 원작 `EggBugGraphics.EggColors`의 HSL 및 darkness 보간식을 따른다.
 
 이 데스크톱 프로젝트에는 Rain World의 `Room`, `AbstractPhysicalObject`, creature graph, cycle 시스템이 없다. 원작 전체 객체 계층을 이식하면 작은 음식 기능 때문에 결합도와 메모리 비용이 과도하게 커진다. 그래서 `IPlayerEdible`의 사용자에게 보이는 계약만 `DesktopFood`로 옮기고, 기존 `BodyChunk`와 `DesktopCollisionWorld`를 재사용했다.
 
@@ -121,7 +126,9 @@
 
 음식을 위한 별도 DirectComposition surface를 생성하지 않는다. 각 음식은 소유 Slugcat의 기존 render batch에 포함되고, 해당 loop의 bounds만 필요한 만큼 union한다. 기존 최소 surface 크기가 384px이고 먹이가 가까운 곳에 생기므로 대부분의 경우 surface resize도 발생하지 않는다.
 
-렌더링은 로컬 atlas에 frame이 있으면 파란 열매의 두 레이어 또는 알벌레 알의 세 레이어를 사용한다. 로컬 설치본이 예상과 달라 frame을 찾지 못할 경우 앱 전체를 중단하지 않고 작은 procedural fallback을 그린다. 정상 설치본에서는 자동 테스트가 모든 사용 frame과 `#rainWorld` 출처를 확인한다.
+렌더링은 로컬 atlas에 frame이 있으면 파란 열매의 두 레이어 또는 알벌레 알의 세 레이어를 사용한다. `FoodRenderPalette`가 원작의 레이어별 tint와 알벌레 hue 분포를 한곳에서 계산한다. 데스크톱에는 `RoomPalette`, `Room.Darkness`, `LightSourceExposure`가 없으므로 중립적인 고정 black/fog palette와 reference darkness `0.4`를 사용한다. 이 값은 사용자가 제공한 어두운 인게임 파란 열매와 바탕화면 위 가시성을 함께 맞추기 위한 desktop 기준값이다.
+
+알벌레 알의 꼬리는 별도 bitmap이나 물리 객체를 만들지 않고 renderer가 재사용하는 12개 꼭짓점 배열로 그린다. 색상 brush도 기존 `bodyBrushes` 캐시를 공유해 매 프레임 GC 할당을 만들지 않는다. 로컬 설치본이 예상과 달라 frame을 찾지 못할 경우 앱 전체를 중단하지 않고 작은 procedural fallback을 그린다. 정상 설치본에서는 자동 테스트가 모든 사용 frame과 `#rainWorld` 출처를 확인한다.
 
 ### 트레이 UI
 
@@ -157,6 +164,8 @@
 - 같은 tick의 immutable `DesktopCollisionSnapshot`을 재사용한다.
 - 음식별 renderer, bitmap, composition surface를 만들지 않는다.
 - atlas image는 기존 `RainWorldAtlasSet` 캐시를 공유한다.
+- 음식 palette 계산은 작은 값 형식으로 반환하며 bitmap을 만들지 않는다.
+- 알벌레 꼬리 꼭짓점 배열과 색상 brush를 renderer가 재사용한다.
 - element 이름은 정적 문자열 배열로 캐시한다.
 - 음식은 Slugcat당 5개, 전체 12개로 제한한다.
 - 먹지 않은 음식은 1200 ticks 후 제거한다.
@@ -177,6 +186,11 @@
 - 로컬 Rain World atlas의 `DangleFruit0/1/2A/B` 여섯 frame 존재
 - frame이 설치된 원본 `#rainWorld` atlas에서 왔는지 확인
 - EggBugEgg의 2 bites, radius, mass와 세 sprite layer
+- DangleFruit A/B의 검은 외곽/짙은 청색 역할과 이전 하늘색 제거
+- 일반 Eggbug hue 4,096개가 원작 `-0.15–0.10` 범위를 벗어나지 않는지 확인
+- 대표 Eggbug palette가 cyan liquid와 warm detail을 생성하는지 확인
+- 로컬 Rain World atlas를 실제 bitmap으로 렌더링해 deep blue, cyan, warm pixel 검출
+- 파란 열매 영역에 이전 pale sky-blue pixel이 남지 않는지 확인
 - 140–360px 무작위 생성 범위와 바닥 위 낙하 시작
 - 다섯 번 연속 제안에서 섭취와 거절이 모두 발생하는지 확인
 - 최대 포만감 제한과 90초당 1점 소화
@@ -185,9 +199,10 @@
 
 ```powershell
 .\build.ps1 -Configuration Release
+.\artifacts\Release\RainWorldDesktopPet.Tests.exe --food-preview .\artifacts\FoodPalettePreview.png
 ```
 
-최종 Release 빌드는 경고 0개, 오류 0개로 완료했고 기존 전체 회귀 테스트와 새 음식 테스트가 모두 통과했다. 실행 파일은 `artifacts/Release/SlugcatInMyMonitor.exe`에 생성된다. 네이티브 렌더러인 `SlugcatInMyMonitor.DirectComposition.dll`도 같은 폴더에 있어야 한다.
+두 번째 명령은 저장소에 에셋을 복사하지 않고 로컬 Rain World atlas에서 파란 열매 한 개와 서로 다른 hue의 알벌레 알 네 개를 렌더링하는 시각 검증용 명령이다. 최종 Release 빌드는 경고 0개, 오류 0개로 완료했고 기존 전체 회귀 테스트와 새 음식 테스트가 모두 통과했다. 실행 파일은 `artifacts/Release/SlugcatInMyMonitor.exe`에 생성된다. 네이티브 렌더러인 `SlugcatInMyMonitor.DirectComposition.dll`도 같은 폴더에 있어야 한다.
 
 빌드 도중 기존 실행 파일이 실행 중이면 Windows가 산출물 교체를 막는다. 이 경우 트레이에서 앱을 종료한 뒤 다시 빌드해야 한다.
 
@@ -198,7 +213,8 @@
 - `7a78ead` — `feat: render food from local Rain World atlas`
 - `f0469b8` — `docs: document food update and extension plan`
 - `f638d0f` — `feat: add Eggbug Eggs and appetite-driven feeding`
-- 후속 문서 커밋 — 색상 피드백, 두 번째 음식, 생성 거리와 포만감 설계 기록
+- `4efd419` — `docs: record appetite update and fruit color issue`
+- `a26036c` — `fix: restore original food palette behavior`
 
 각 커밋은 `origin/feature/food-update`에 순차적으로 push했다.
 
@@ -216,7 +232,7 @@
 
 다음 후보 평가:
 
-- EggBugEgg: 두 번째 음식으로 구현 완료. 원작의 유연한 꼬리 mesh와 liquid drip은 후속 시각 개선 후보
+- EggBugEgg: 두 번째 음식과 가벼운 5구간 꼬리 mesh 구현 완료. liquid drip은 후속 시각 개선 후보
 - Mushroom: 먹는 동작은 단순하지만 time slowdown을 데스크톱에서 어떻게 표현할지 제품 결정이 필요
 - Fly: creature AI, 날개 animation, capture, sound가 필요하므로 별도 creature 시스템 이후로 연기
 - WaterNut/JellyFish: 물, 전기, tentacle 의존성이 커서 현재 desktop terrain 모델과 맞지 않음
@@ -226,7 +242,7 @@
 
 ## 10. 알려진 제한과 다음 권장 작업
 
-- 사용자가 확인한 결과 현재 파란 열매가 인게임보다 연하고 하늘색에 가깝다. `SpriteRenderer.RenderFoods`의 고정 tint(`40,72,150` 및 `120,170,255`)가 원작 palette보다 밝은 것이 우선 의심된다. 이번 후속 작업에서는 비교를 위해 의도적으로 수정하지 않았으며, 알벌레 알과 나란히 확인한 뒤 원작 `DangleFruit.ApplyPalette`를 다시 추출해 별도 커밋으로 교정해야 한다.
+- 파란 열매의 A/B 색상·순서 오류와 알벌레 알의 전체 hue 난수 오류는 `a26036c`에서 교정했다. 다만 데스크톱 앱에는 Rain World의 현재 방 정보가 없으므로 방마다 달라지는 `blackColor`, `fogColor`, darkness와 광원 노출을 실시간으로 재현하지는 않는다. 현재는 reference darkness `0.4`의 고정 중립 palette를 사용하므로 특정 방의 스크린샷과 픽셀 단위로 완전히 같지는 않을 수 있다.
 - 음식은 현재 Slugcat이 지지받는 같은 표면 또는 가까운 monitor floor에 생성하도록 최적화되어 있다. 사용자가 창을 급격히 옮겨 먹이가 다른 층으로 떨어지면 Slugcat이 장거리 pathfinding을 하지 못할 수 있으며, 30초 후 자동 제거된다.
 - 현재 들기 위치는 head 기반 mouth anchor다. 원작처럼 grasp별 손 animation을 완전히 재현하려면 `SlugcatGraphics`에 food hand target mode를 추가해야 한다.
 - bite event 이름은 남기지만 사운드는 재생하지 않는다. 프로젝트 전체 sound backend가 생길 때 event를 연결할 수 있다.
