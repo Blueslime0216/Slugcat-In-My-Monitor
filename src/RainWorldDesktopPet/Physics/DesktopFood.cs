@@ -24,6 +24,10 @@ namespace RainWorldDesktopPet.Physics
     // importing Room/AbstractPhysicalObject/Creature graphs into the overlay.
     public sealed class DesktopFood
     {
+        private static readonly string[] FrontElements =
+            { "DangleFruit0A", "DangleFruit1A", "DangleFruit2A" };
+        private static readonly string[] BackElements =
+            { "DangleFruit0B", "DangleFruit1B", "DangleFruit2B" };
         public const int DangleFruitInitialBites = 3;
         public const int DangleFruitFoodPoints = 1;
         public const int DefaultLifetimeTicks = 1200;
@@ -74,8 +78,8 @@ namespace RainWorldDesktopPet.Physics
         {
             get { return MathUtil.Clamp(DangleFruitInitialBites - BitesRemaining, 0, 2); }
         }
-        public string FrontElement { get { return "DangleFruit" + SpriteFrame + "A"; } }
-        public string BackElement { get { return "DangleFruit" + SpriteFrame + "B"; } }
+        public string FrontElement { get { return FrontElements[SpriteFrame]; } }
+        public string BackElement { get { return BackElements[SpriteFrame]; } }
 
         public void SetCreationVelocity(Vec2 velocity)
         {

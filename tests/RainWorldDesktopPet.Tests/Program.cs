@@ -2084,6 +2084,17 @@ namespace RainWorldDesktopPet.Tests
                             StringComparison.OrdinalIgnoreCase),
                         "BioSpear must resolve from the installed original atlas");
                 }
+                for (int frame = 0; frame < 3; frame++)
+                {
+                    AtlasSprite fruitLayer;
+                    True(set.TryGet("DangleFruit" + frame + "A", out fruitLayer),
+                        "embedded original DangleFruit" + frame + "A");
+                    True(set.TryGet("DangleFruit" + frame + "B", out fruitLayer),
+                        "embedded original DangleFruit" + frame + "B");
+                    True(fruitLayer.Atlas.ImagePath.EndsWith("#rainWorld",
+                        StringComparison.OrdinalIgnoreCase),
+                        "DangleFruit must resolve from the installed original atlas");
+                }
                 for (int i = 0; i < SlugcatVisualProfiles.All.Count; i++)
                 {
                     SlugcatVisualProfile profile = SlugcatVisualProfiles.All[i];
