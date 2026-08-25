@@ -1110,6 +1110,62 @@ namespace RainWorldDesktopPet.Graphics
             }
         }
 
+        public void RenderFoods(System.Drawing.Graphics graphics,
+            DesktopFoodManager foodManager, RenderSpace renderSpace,
+            double characterRenderScale, double interpolation, bool heldLayer)
+        {
+            if (foodManager == null || foodManager.Foods.Count == 0) return;
+            GraphicsState state = graphics.Save();
+            try
+            {
+                using (Matrix transform = new Matrix((float)characterRenderScale,
+                    0.0f, 0.0f, (float)characterRenderScale,
+                    (float)-renderSpace.WorldOrigin.X,
+                    (float)-renderSpace.WorldOrigin.Y))
+                {
+                    graphics.Transform = transform;
+                }
+
+                for (int i = 0; i < foodManager.Foods.Count; i++)
+                {
+                    DesktopFood food = foodManager.Foods[i];
+                    if (!food.IsActive) continue;
+                    bool held = food.State == DesktopFoodState.Held ||
+                        food.State == DesktopFoodState.Biting;
+                    if (held != heldLayer) continue;
+
+                    Vec2 center = food.Chunk.RenderPosition(interpolation);
+                    Vec2 direction = MathUtil.SlerpDirection(food.LastRotation,
+                        food.Rotation, interpolation);
+                    double angle = AimScreen(Vec2.Zero, direction);
+                    AtlasSprite ignored;
+                    bool hasFront = atlas != null &&
+                        atlas.TryGet(food.FrontElement, out ignored);
+                    bool hasBack = atlas != null &&
+                        atlas.TryGet(food.BackElement, out ignored);
+                    if (hasBack)
+                        DrawElement(graphics, food.BackElement, center, angle,
+                            1.0, 1.0, 0.5, 0.5,
+                            Color.FromArgb(255, 40, 72, 150));
+                    if (hasFront)
+                        DrawElement(graphics, food.FrontElement, center, angle,
+                            1.0, 1.0, 0.5, 0.5,
+                            Color.FromArgb(255, 120, 170, 255));
+                    if (!hasFront && !hasBack)
+                    {
+                        FillCircle(graphics, center, 7.0,
+                            Color.FromArgb(255, 65, 105, 220));
+                        FillCircle(graphics, center + new Vec2(-2.0, -2.0), 2.0,
+                            Color.FromArgb(230, 175, 205, 255));
+                    }
+                }
+            }
+            finally
+            {
+                graphics.Restore(state);
+            }
+        }
+
         private static DmsSpriteSide SelectTorsoSide(SlugcatPose pose)
         {
             if (pose.BodyMode == BodyModeIndex.Stand && pose.InputX != 0)

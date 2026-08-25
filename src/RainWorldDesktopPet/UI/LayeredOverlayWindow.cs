@@ -308,9 +308,15 @@ namespace RainWorldDesktopPet.UI
                         int loopIndex = batch.SurfaceIndices[member];
                         GameLoop loop = gameLoops[loopIndex];
                         bool debug = loop.DebugEnabled && ReferenceEquals(loop, gameLoop);
+                        loop.Renderer.RenderFoods(graphics, loop.Foods, renderSpace,
+                            poseBuffer[loopIndex].CharacterRenderScale,
+                            poseBuffer[loopIndex].TimeStacker, false);
                         loop.Renderer.Render(graphics, poseBuffer[loopIndex], renderSpace, debug,
                             loop.World, loop.Slugcat, loop.AI, loop.AssetStatus,
                             loop.SelectedSlugcat);
+                        loop.Renderer.RenderFoods(graphics, loop.Foods, renderSpace,
+                            poseBuffer[loopIndex].CharacterRenderScale,
+                            poseBuffer[loopIndex].TimeStacker, true);
                     }
                     compositionHost.Present(batchIndex);
 
@@ -484,6 +490,16 @@ namespace RainWorldDesktopPet.UI
                         (float)(rendered.X - 2.0), (float)(rendered.Y - 2.0),
                         4.0f, 4.0f));
                 }
+            }
+            for (int i = 0; i < loop.Foods.Foods.Count; i++)
+            {
+                DesktopFood food = loop.Foods.Foods[i];
+                if (!food.IsActive) continue;
+                Vec2 center = food.Chunk.RenderPosition(pose.TimeStacker) * scale;
+                double reach = (food.Chunk.Radius + 4.0) * scale;
+                content = RectangleF.Union(content, new RectangleF(
+                    (float)(center.X - reach), (float)(center.Y - reach),
+                    (float)(reach * 2.0), (float)(reach * 2.0)));
             }
 
             int contentWidth = (int)Math.Ceiling(content.Width) + OverlayPadding * 2;
