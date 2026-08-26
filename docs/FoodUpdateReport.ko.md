@@ -1,6 +1,8 @@
 # 음식 업데이트 상세 보고서
 
 작성일: 2026-08-25
+
+최종 안정화 검수: 2026-08-26
 대상 브랜치: `feature/food-update-pr`
 대상 fork: `Blueslime0216/Slugcat-In-My-Monitor`
 
@@ -39,6 +41,8 @@
 - 포만감 최대 3점, 예약 먹이를 포함한 appetite 판정, 약 90초당 1점 소화
 - Slugcat 한 마리당 최대 5개, 전체 최대 12개 제한
 - 약 30초 동안 먹지 않은 자유 음식 자동 만료
+- 화면 구성 변경으로 화면 밖에 고립된 음식의 가시 영역 복구
+- 소유 Slugcat과 720 desktop pixels보다 멀어진 음식 자동 정리
 - 선택된 Slugcat의 음식 치우기 메뉴
 
 의도적으로 제외한 기능:
@@ -90,7 +94,7 @@
 
 예외 흐름:
 
-- 잡힌 Slugcat이 기절하거나 사용자가 직접 들어 올리면 `Held/Biting → Free`
+- 잡힌 Slugcat이 기절하거나 사용자가 직접 들어 올리면 `Held/Biting → Claimed`
 - 자유 상태로 1200 simulation ticks, 약 30초가 지나면 `Free/Claimed → Expired`
 
 ### `DesktopFoodManager`
@@ -99,7 +103,7 @@
 
 각 `GameLoop`가 관리자 한 개를 소유한다. 이 소유 관계가 예약 역할을 하므로 여러 Slugcat이 같은 먹이를 동시에 선택하지 않는다. 음식 접근은 기존 AI가 직접 물리를 바꾸는 방식이 아니라 최종 `VirtualInput`만 덮어쓴다. 실제 걷기, 마찰, 충돌은 기존 Slugcat movement 경로가 계속 담당한다.
 
-먹이는 현재 지지 표면 위에서 140–360 desktop pixels 떨어진 무작위 방향에 생성된다. 68%는 현재 바라보는 방향, 32%는 반대 방향이며, 바닥 위 45–120px 높이에서 실제 물리로 떨어진다. 지지 표면을 찾지 못하면 가장 가까운 monitor work area의 floor를 사용하고, 생성 위치는 표면 좌우 범위 안으로 clamp한다.
+먹이는 현재 지지 표면 위에서 140–360 desktop pixels 떨어진 무작위 방향에 생성된다. 68%는 현재 바라보는 방향, 32%는 반대 방향이며, 바닥 위 45–120px 높이에서 실제 물리로 떨어진다. 하나의 창 윗면이 다른 창에 가려져 여러 조각으로 분리된 경우에는 단순히 같은 HWND의 첫 표면을 고르지 않고, Slugcat의 지지 BodyChunk가 실제로 올라가 있는 가시 조각만 선택한다. 지지 표면이 없는 공중 상태에서만 가장 가까운 monitor work area의 floor를 사용한다. 벽타기 중이거나 현재 표면 조각이 사라졌거나 음식 반지름보다 좁은 표면에서는 도달 불가능한 먹이를 만들지 않고 배치 실패를 반환한다.
 
 접근 거리가 충분히 가까워지고 Slugcat이 grounded 상태이면 먹이를 집는다. 8 ticks 동안 들기 자세를 유지한 뒤 18 ticks 간격으로 bite한다. 푸른 열매는 3회, 알벌레 알은 2회 뒤 1 food point를 얻는다.
 
@@ -112,11 +116,12 @@
 40Hz 고정 tick의 처리 순서는 다음과 같다.
 
 1. 음식 자유 물리 업데이트
-2. 기존 AI 입력 계산
-3. 활성 음식이 있으면 음식 접근 입력으로 최종 intent 조정
-4. 기존 Slugcat 물리와 movement 실행
-5. 기존 Slugcat graphics 업데이트
-6. 최신 머리 위치에 든 음식을 고정하고 bite timer 진행
+2. 활성 음식의 주목 대상을 선택
+3. 음식 주목 대상을 같은 tick의 기존 AI attention 계산에 우선 적용
+4. 활성 음식이 있으면 음식 접근 입력으로 최종 intent 조정
+5. 기존 Slugcat 물리와 movement 실행
+6. 기존 Slugcat graphics 업데이트
+7. 최신 시뮬레이션 BodyChunk 위치에서 계산한 입 좌표에 든 음식을 고정하고 bite timer 진행
 
 기존 AI를 매 tick 계속 실행하므로 성격, 필요도, cooldown 값이 음식 섭취 중에도 멈추지 않는다. 음식 controller는 먹이가 활성화된 동안 최종 이동 intent만 제한한다.
 
@@ -124,7 +129,7 @@
 
 파일: `src/RainWorldDesktopPet/Graphics/SpriteRenderer.cs`, `src/RainWorldDesktopPet/UI/LayeredOverlayWindow.cs`
 
-음식을 위한 별도 DirectComposition surface를 생성하지 않는다. 각 음식은 소유 Slugcat의 기존 render batch에 포함되고, 해당 loop의 bounds만 필요한 만큼 union한다. 기존 최소 surface 크기가 384px이고 먹이가 가까운 곳에 생기므로 대부분의 경우 surface resize도 발생하지 않는다.
+음식을 위한 별도 DirectComposition surface를 생성하지 않는다. 각 음식은 소유 Slugcat의 기존 render batch에 포함되고, 해당 loop의 bounds만 필요한 만큼 union한다. 기존 최소 surface 크기가 384px이고 먹이가 가까운 곳에 생기므로 대부분의 경우 surface resize도 발생하지 않는다. 사용자가 Slugcat을 다른 모니터로 급히 옮겨 소유자와 음식 사이가 720 desktop pixels보다 벌어지면 음식은 합성 bounds에 포함되지 않고 물리 tick에서 만료된다. 따라서 한 개의 오래된 음식이 여러 모니터를 잇는 거대한 backing bitmap을 만들 수 없다.
 
 렌더링은 로컬 atlas에 frame이 있으면 푸른 열매의 두 레이어 또는 알벌레 알의 세 레이어를 사용한다. `FoodRenderPalette`가 원작의 레이어별 tint와 알벌레 hue 분포를 한곳에서 계산한다. 데스크톱에는 `RoomPalette`, `Room.Darkness`, `LightSourceExposure`가 없으므로 중립적인 고정 black/fog palette와 reference darkness `0.4`를 사용한다. 이 값은 사용자가 제공한 어두운 인게임 푸른 열매와 바탕화면 위 가시성을 함께 맞추기 위한 desktop 기준값이다.
 
@@ -142,7 +147,7 @@
   - `포만감 0.0/3.0`
   - `선택한 슬러그캣의 먹이 치우기`
 
-메뉴를 열 때 현재 선택 번호, 포만감, 제한 상태를 갱신한다. 수락한 경우 balloon을 띄우지 않고, 먹이를 거절했거나 개수 제한에 도달했을 때만 짧은 안내를 표시한다.
+메뉴를 열 때 현재 선택 번호, 포만감, 제한 상태를 갱신한다. 개수 계산은 원시 리스트 길이가 아니라 즉시 계산한 활성 음식 수를 사용하므로, 일시 정지 중 소비·만료된 객체가 다음 물리 tick 전까지 메뉴를 막지 않는다. 수락한 경우 balloon을 띄우지 않고, 먹이를 거절했거나 개수 제한에 도달했을 때만 짧은 안내를 표시한다. 벽타기·사라진 표면·너무 좁은 표면으로 생성할 수 없는 경우에는 한도 초과가 아니라 수평 바닥에서 다시 시도하라는 별도 안내를 표시한다.
 
 ## 5. 입력과 데스크톱 사용성 검토
 
@@ -173,6 +178,9 @@
 - element 이름은 정적 문자열 배열로 캐시한다.
 - 음식은 Slugcat당 5개, 전체 12개로 제한한다.
 - 먹지 않은 음식은 1200 ticks 후 제거한다.
+- 소비·만료 상태는 다음 물리 tick을 기다리지 않고 개수 제한에서 즉시 제외한다.
+- 화면 구성 변경 뒤 가시 모니터 밖에 고립된 음식은 소유 Slugcat 근처의 안전한 monitor floor로 되돌린다.
+- 소유 Slugcat과 720 desktop pixels보다 멀어진 음식은 만료시키고 렌더 bounds 계산에서도 이 거리를 이중 확인한다.
 - 렌더링은 음식 수가 Slugcat당 최대 5개인 작은 선형 loop 두 번으로 제한된다.
 - 움직이는 window surface의 delta를 음식에도 적용하여 창 이동 시 떠 있거나 뒤처지는 현상을 줄였다.
 
@@ -203,6 +211,11 @@
 - 음식 치우기 후 target, interaction countdown, accepted 상태가 남지 않는지 확인
 - 로컬 atlas 전체가 없어도 두 음식 fallback이 모두 보이는지 bitmap으로 확인
 - 1,100개 색상을 연속 요청해도 GDI 색상 resource cache가 상한을 지키는지 확인
+- 다른 창에 가려져 둘로 분리된 같은 HWND의 윗면에서 Slugcat이 서 있는 실제 조각에만 생성되는지 확인
+- 벽타기 상태의 생성 실패가 개수 제한이 아닌 `PlacementUnavailable`으로 구분되는지 확인
+- 소비된 객체가 리스트 정리 전에도 활성 개수와 메뉴 용량에서 즉시 제외되는지 확인
+- 음식 attention이 기존 AI attention과 충돌하지 않고 같은 tick에 smoothing되는지 확인
+- 화면 밖 음식은 가시 모니터로 복구되고, 720px 제한을 넘긴 음식은 합성 bounds를 키우기 전에 정리되는지 확인
 
 검증 명령:
 
@@ -212,6 +225,18 @@
 ```
 
 두 번째 명령은 저장소에 에셋을 복사하지 않고 로컬 Rain World atlas에서 푸른 열매 한 개와 서로 다른 hue의 알벌레 알 네 개를 렌더링하는 시각 검증용 명령이다. 최종 Release 빌드는 경고 0개, 오류 0개로 완료했고 기존 전체 회귀 테스트와 새 음식 테스트가 모두 통과했다. 실행 파일은 `artifacts/Release/SlugcatInMyMonitor.exe`에 생성된다. 네이티브 렌더러인 `SlugcatInMyMonitor.DirectComposition.dll`도 같은 폴더에 있어야 한다.
+
+2026-08-26 안정화에서는 기존 음식 기능을 적대적으로 다시 검수해 다음 일곱 가지 결함을 수정했다.
+
+1. 분할된 창 표면에서 같은 HWND의 첫 조각을 선택하던 생성 위치 오류
+2. 소비·만료 객체가 다음 tick까지 메뉴 용량을 차지하던 오류
+3. Core 음식 로직이 renderer의 `SlugcatGraphics`와 palette 난수 함수에 의존하던 계층 역전
+4. 음식 attention이 `Attention.Step()` 이후 설정되어 한 tick 늦던 순서 오류
+5. 멀어진 음식 하나가 소유자까지의 전체 영역을 합성 bitmap으로 만들 수 있던 메모리 위험
+6. 모니터 제거·배치 변경 뒤 음식이 화면 밖에서 용량을 계속 차지하던 고립 문제
+7. 도달 가능한 배치가 없을 때도 UI가 개수 제한으로 잘못 안내하던 오류
+
+Core는 이제 Slugcat의 두 `BodyChunk`만으로 음식 상호작용 anchor를 계산한다. 색상 난수의 원작 분포는 물리 음식 모델로 이동했고 renderer는 그 결과를 그리는 역할만 담당한다. 이는 프로젝트의 simulation/AI/graphics 계층 분리 원칙과 renderer가 simulation의 진실이 되어서는 안 된다는 방향을 따른다.
 
 빌드 도중 기존 실행 파일이 실행 중이면 Windows가 산출물 교체를 막는다. 이 경우 트레이에서 앱을 종료한 뒤 다시 빌드해야 한다.
 
@@ -261,8 +286,8 @@ PR 안정화 시점에는 저장소 규칙에 따라 `main`이 아니라 최신 
 ## 10. 알려진 제한과 다음 권장 작업
 
 - 푸른 열매의 A/B 색상·순서 오류와 알벌레 알의 전체 hue 난수 오류는 `a26036c`에서 교정했다. 다만 데스크톱 앱에는 Rain World의 현재 방 정보가 없으므로 방마다 달라지는 `blackColor`, `fogColor`, darkness와 광원 노출을 실시간으로 재현하지는 않는다. 현재는 reference darkness `0.4`의 고정 중립 palette를 사용하므로 특정 방의 스크린샷과 픽셀 단위로 완전히 같지는 않을 수 있다.
-- 음식은 현재 Slugcat이 지지받는 같은 표면 또는 가까운 monitor floor에 생성하도록 최적화되어 있다. 사용자가 창을 급격히 옮겨 먹이가 다른 층으로 떨어지면 Slugcat이 장거리 pathfinding을 하지 못할 수 있으며, 30초 후 자동 제거된다.
-- 현재 들기 위치는 head 기반 mouth anchor다. 원작처럼 grasp별 손 animation을 완전히 재현하려면 `SlugcatGraphics`에 food hand target mode를 추가해야 한다.
+- 음식은 현재 Slugcat이 지지받는 같은 가시 표면 조각 또는 공중 상태의 가까운 monitor floor에 생성하도록 최적화되어 있다. 사용자가 창을 급격히 옮겨 음식이 화면 밖에 고립되면 소유자 근처로 복구하고, 소유자에게서 720px 이상 멀어지면 정리한다. 다른 높이의 창까지 찾아가는 장거리 pathfinding 자체는 아직 구현하지 않았다.
+- 현재 들기 위치는 renderer의 head가 아니라 simulation BodyChunk에서 계산한 mouth anchor다. 원작처럼 grasp별 손 animation을 완전히 재현하려면 graphics가 simulation 상태를 읽는 food hand target mode를 별도로 추가해야 한다.
 - bite event 이름은 남기지만 사운드는 재생하지 않는다. 프로젝트 전체 sound backend가 생길 때 event를 연결할 수 있다.
 - 포만감은 세션 동안만 유지되고 앱을 다시 실행하면 공복으로 시작한다. 장기 저장은 방치형 사용에서 원치 않는 벌점이 될 수 있으므로 현재는 의도적으로 제외했다.
 - 실제 사용 피드백에서 트레이 단계가 번거롭다는 의견이 많을 경우에만 사용자가 직접 지정하는 optional hotkey를 설정 화면에 추가한다. 기본값은 계속 비활성으로 두는 것이 좋다.

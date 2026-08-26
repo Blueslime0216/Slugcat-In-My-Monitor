@@ -1119,7 +1119,7 @@ namespace RainWorldDesktopPet.Graphics
         }
 
         public void RenderFoods(System.Drawing.Graphics graphics,
-            DesktopFoodManager foodManager, RenderSpace renderSpace,
+            DesktopFoodManager foodManager, Vec2 ownerPosition, RenderSpace renderSpace,
             double characterRenderScale, double interpolation, bool heldLayer)
         {
             if (foodManager == null || foodManager.Foods.Count == 0) return;
@@ -1128,7 +1128,8 @@ namespace RainWorldDesktopPet.Graphics
             for (int i = 0; i < foods.Count; i++)
             {
                 DesktopFood candidate = foods[i];
-                if (!candidate.IsActive) continue;
+                if (!DesktopFoodManager.IsWithinOwnerRenderRange(candidate,
+                    ownerPosition)) continue;
                 bool held = candidate.State == DesktopFoodState.Held ||
                     candidate.State == DesktopFoodState.Biting;
                 if (held != heldLayer) continue;
@@ -1153,7 +1154,8 @@ namespace RainWorldDesktopPet.Graphics
                 for (int i = 0; i < foods.Count; i++)
                 {
                     DesktopFood food = foods[i];
-                    if (!food.IsActive) continue;
+                    if (!DesktopFoodManager.IsWithinOwnerRenderRange(food,
+                        ownerPosition)) continue;
                     bool held = food.State == DesktopFoodState.Held ||
                         food.State == DesktopFoodState.Biting;
                     if (held != heldLayer) continue;

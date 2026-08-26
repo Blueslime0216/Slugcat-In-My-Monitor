@@ -735,6 +735,31 @@ namespace RainWorldDesktopPet.Physics
             return false;
         }
 
+        public bool TryGetSurface(long surfaceId, DesktopSurfaceKind kind,
+            Vec2 supportingPoint, out DesktopSurface found)
+        {
+            found = null;
+            double bestDistance = double.MaxValue;
+            for (int i = 0; i < surfaces.Count; i++)
+            {
+                DesktopSurface surface = surfaces[i];
+                if (surface.Id != surfaceId || surface.Kind != kind) continue;
+                bool overlaps = surface.IsHorizontal
+                    ? supportingPoint.X >= surface.Left - 2.0 &&
+                        supportingPoint.X <= surface.Right + 2.0
+                    : supportingPoint.Y >= surface.Top - 2.0 &&
+                        supportingPoint.Y <= surface.Bottom + 2.0;
+                if (!overlaps) continue;
+                double distance = surface.IsHorizontal
+                    ? Math.Abs(supportingPoint.Y - surface.Top)
+                    : Math.Abs(supportingPoint.X - surface.WallX);
+                if (distance >= bestDistance) continue;
+                found = surface;
+                bestDistance = distance;
+            }
+            return found != null;
+        }
+
         public bool ContainsSurface(long surfaceId, DesktopSurfaceKind kind, Vec2 point, double tolerance)
         {
             for (int i = 0; i < surfaces.Count; i++)

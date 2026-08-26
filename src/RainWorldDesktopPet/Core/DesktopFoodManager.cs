@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using RainWorldDesktopPet.AI;
 using RainWorldDesktopPet.Creature;
 using RainWorldDesktopPet.Desktop;
-using RainWorldDesktopPet.Graphics;
 using RainWorldDesktopPet.Physics;
 
 namespace RainWorldDesktopPet.Core
@@ -16,6 +15,15 @@ namespace RainWorldDesktopPet.Core
         Eating
     }
 
+    public enum DesktopFoodSpawnResult
+    {
+        None,
+        Spawned,
+        OwnerLimitReached,
+        PlacementUnavailable,
+        InvalidContext
+    }
+
     // Food is owned by one GameLoop. That ownership is the reservation: two
     // desktop pets never race for one item and no extra composition surface is
     // needed. A future shared-food mode can replace this policy at this seam.
@@ -24,6 +32,7 @@ namespace RainWorldDesktopPet.Core
         public const int MaximumActiveFoods = 5;
         public const double MaximumFullness = 3.0;
         public const int DigestionTicksPerFoodPoint = 3600;
+        public const double MaximumOwnerDistancePixels = 720.0;
         private const double ApproachDistance = 17.0;
         private const double PickupDistance = 25.0;
         private const double PickupVerticalTolerance = 32.0;
@@ -55,15 +64,31 @@ namespace RainWorldDesktopPet.Core
         public int TotalBites { get; private set; }
         public string LastEvent { get; private set; }
         public bool LastSpawnAccepted { get; private set; }
+        public DesktopFoodSpawnResult LastSpawnResult { get; private set; }
         public double Fullness { get { return fullness; } }
         public double FullnessRatio { get { return fullness / MaximumFullness; } }
+        public int ActiveFoodCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < foods.Count; i++)
+                    if (foods[i].IsActive) count++;
+                return count;
+            }
+        }
 
         public bool TryAddDangleFruit(Vec2 position)
         {
             RemoveInactive();
-            if (foods.Count >= MaximumActiveFoods) return false;
+            if (foods.Count >= MaximumActiveFoods)
+            {
+                LastSpawnResult = DesktopFoodSpawnResult.OwnerLimitReached;
+                return false;
+            }
             DesktopFood fruit = new DesktopFood(DesktopFoodKind.DangleFruit, position);
             foods.Add(fruit);
+            LastSpawnResult = DesktopFoodSpawnResult.Spawned;
             LastEvent = "DangleFruit_Spawn";
             return true;
         }
@@ -71,10 +96,15 @@ namespace RainWorldDesktopPet.Core
         public bool TryAddEggBugEgg(Vec2 position)
         {
             RemoveInactive();
-            if (foods.Count >= MaximumActiveFoods) return false;
+            if (foods.Count >= MaximumActiveFoods)
+            {
+                LastSpawnResult = DesktopFoodSpawnResult.OwnerLimitReached;
+                return false;
+            }
             DesktopFood egg = new DesktopFood(DesktopFoodKind.EggBugEgg, position,
-                FoodRenderPalette.CreateNormalEggHue(random));
+                DesktopFood.CreateNormalEggHue(random));
             foods.Add(egg);
+            LastSpawnResult = DesktopFoodSpawnResult.Spawned;
             LastEvent = "EggBugEgg_Spawn";
             return true;
         }
@@ -92,9 +122,18 @@ namespace RainWorldDesktopPet.Core
         private bool TrySpawnFood(DesktopFoodKind kind, Slugcat slugcat,
             DesktopCollisionWorld world)
         {
-            if (slugcat == null || world == null) return false;
+            LastSpawnAccepted = false;
+            if (slugcat == null || world == null)
+            {
+                LastSpawnResult = DesktopFoodSpawnResult.InvalidContext;
+                return false;
+            }
             RemoveInactive();
-            if (foods.Count >= MaximumActiveFoods) return false;
+            if (foods.Count >= MaximumActiveFoods)
+            {
+                LastSpawnResult = DesktopFoodSpawnResult.OwnerLimitReached;
+                return false;
+            }
 
             double radius = kind == DesktopFoodKind.EggBugEgg
                 ? DesktopFood.EggBugEggRadius : DesktopFood.DangleFruitRadius;
@@ -109,13 +148,34 @@ namespace RainWorldDesktopPet.Core
             double left;
             double right;
             DesktopSurface surface;
-            if (slugcat.PrimarySupportingSurfaceId != 0 && world.TryGetSurface(
-                slugcat.PrimarySupportingSurfaceId, slugcat.PrimarySupportingSurfaceKind,
-                out surface) && surface.IsHorizontal)
+            BodyChunk supportChunk = slugcat.BodyChunks[1].SupportingSurfaceId != 0
+                ? slugcat.BodyChunks[1]
+                : (slugcat.BodyChunks[0].SupportingSurfaceId != 0
+                    ? slugcat.BodyChunks[0] : null);
+            BodyChunk wallChunk = slugcat.BodyChunks[1].WallSurfaceId != 0
+                ? slugcat.BodyChunks[1]
+                : (slugcat.BodyChunks[0].WallSurfaceId != 0
+                    ? slugcat.BodyChunks[0] : null);
+            if (supportChunk != null)
             {
+                if (!world.TryGetSurface(supportChunk.SupportingSurfaceId,
+                    supportChunk.SupportingSurfaceKind, supportChunk.Position,
+                    out surface) || !surface.IsHorizontal)
+                {
+                    LastSpawnResult = DesktopFoodSpawnResult.PlacementUnavailable;
+                    return false;
+                }
                 left = surface.Left + radius + 3.0;
                 right = surface.Right - radius - 3.0;
                 y = surface.Top - radius;
+            }
+            else if (wallChunk != null)
+            {
+                // Food seeking currently produces horizontal input only. A
+                // monitor-floor fallback while wall climbing can therefore
+                // place an item on a level the Slugcat cannot route back to.
+                LastSpawnResult = DesktopFoodSpawnResult.PlacementUnavailable;
+                return false;
             }
             else
             {
@@ -127,7 +187,11 @@ namespace RainWorldDesktopPet.Core
                 y = DesktopWorldTransform.ToSimulationLength(monitor.FloorY) - radius;
             }
 
-            if (right <= left) return false;
+            if (right <= left)
+            {
+                LastSpawnResult = DesktopFoodSpawnResult.PlacementUnavailable;
+                return false;
+            }
             x = MathUtil.Clamp(x, left, right);
             if (Math.Abs(x - slugcat.Center.X) < minimumDistance)
             {
@@ -140,7 +204,7 @@ namespace RainWorldDesktopPet.Core
             double dropHeight = DesktopWorldTransform.ToSimulationLength(
                 MathUtil.Lerp(45.0, 120.0, random.NextDouble()));
             double visualHue = kind == DesktopFoodKind.EggBugEgg
-                ? FoodRenderPalette.CreateNormalEggHue(random) : 0.0;
+                ? DesktopFood.CreateNormalEggHue(random) : 0.0;
             DesktopFood food = new DesktopFood(kind,
                 new Vec2(x, y - dropHeight), visualHue);
             food.SetCreationVelocity(new Vec2(direction *
@@ -150,14 +214,38 @@ namespace RainWorldDesktopPet.Core
             if (LastSpawnAccepted && target == null) target = food;
             LastEvent = FoodEventName(food, LastSpawnAccepted
                 ? "Spawn_Accepted" : "Spawn_Ignored");
+            LastSpawnResult = DesktopFoodSpawnResult.Spawned;
             return true;
         }
 
-        public void StepPhysics(DesktopCollisionWorld world)
+        public void StepPhysics(DesktopCollisionWorld world, Vec2 ownerPosition)
         {
             StepMetabolism();
             RemoveInactive();
-            for (int i = 0; i < foods.Count; i++) foods[i].StepPhysics(world);
+            for (int i = 0; i < foods.Count; i++)
+            {
+                DesktopFood food = foods[i];
+                food.StepPhysics(world);
+                if (!food.IsActive || !food.IsPhysical) continue;
+                IList<MonitorInfo> monitors = world.CurrentSnapshot.Monitors;
+                if (monitors == null || monitors.Count == 0)
+                {
+                    food.Expire();
+                    continue;
+                }
+                if (!DesktopRecovery.IsNearAnyMonitor(food.Chunk.Position, monitors) &&
+                    !DesktopRecovery.IsAboveMonitorCeiling(food.Chunk.Position, monitors))
+                {
+                    food.Reposition(DesktopRecovery.FindSafeHipsPosition(ownerPosition,
+                        monitors, food.Chunk.Radius));
+                    LastEvent = FoodEventName(food, "Recovered");
+                }
+                if (!IsWithinOwnerRenderRange(food, ownerPosition))
+                {
+                    food.Expire();
+                    LastEvent = FoodEventName(food, "Expired_Distant");
+                }
+            }
             RemoveInactive();
         }
 
@@ -167,11 +255,20 @@ namespace RainWorldDesktopPet.Core
                 1.0 / DigestionTicksPerFoodPoint);
         }
 
-        public bool TryProduceInput(Slugcat slugcat, SlugcatGraphics graphics,
-            AttentionSystem attention, out VirtualInput input)
+        public bool TryGetAttentionTarget(Slugcat slugcat, out Vec2 position)
+        {
+            position = Vec2.Zero;
+            if (!CanInteract(slugcat)) return false;
+            SelectTarget();
+            if (target == null) return false;
+            position = target.Chunk.Position;
+            return true;
+        }
+
+        public bool TryProduceInput(Slugcat slugcat, out VirtualInput input)
         {
             input = VirtualInput.Neutral;
-            if (slugcat == null || graphics == null) return false;
+            if (slugcat == null) return false;
             SelectTarget();
             if (target == null)
             {
@@ -185,9 +282,6 @@ namespace RainWorldDesktopPet.Core
                 DropTarget(slugcat);
                 return false;
             }
-
-            if (attention != null)
-                attention.SetTarget(AttentionKind.Food, target.Chunk.Position);
 
             if (target.State == DesktopFoodState.Held ||
                 target.State == DesktopFoodState.Biting)
@@ -209,7 +303,7 @@ namespace RainWorldDesktopPet.Core
             if (offset.Length <= PickupDistance &&
                 Math.Abs(offset.Y) <= PickupVerticalTolerance && slugcat.State.Grounded)
             {
-                Vec2 mouth = MouthPosition(slugcat, graphics);
+                Vec2 mouth = FoodInteractionAnchor(slugcat);
                 if (target.PickUp(mouth))
                 {
                     interactionCountdown = HoldBeforeBitingTicks;
@@ -220,9 +314,9 @@ namespace RainWorldDesktopPet.Core
             return true;
         }
 
-        public void StepInteraction(Slugcat slugcat, SlugcatGraphics graphics)
+        public void StepInteraction(Slugcat slugcat)
         {
-            if (slugcat == null || graphics == null)
+            if (slugcat == null)
             {
                 target = null;
                 interactionCountdown = 0;
@@ -239,7 +333,7 @@ namespace RainWorldDesktopPet.Core
             if (target.State != DesktopFoodState.Held &&
                 target.State != DesktopFoodState.Biting) return;
 
-            target.HoldAt(MouthPosition(slugcat, graphics));
+            target.HoldAt(FoodInteractionAnchor(slugcat));
             if (interactionCountdown > 0)
             {
                 interactionCountdown--;
@@ -283,6 +377,7 @@ namespace RainWorldDesktopPet.Core
             interactionCountdown = 0;
             InteractionState = FoodInteractionState.None;
             LastSpawnAccepted = false;
+            LastSpawnResult = DesktopFoodSpawnResult.None;
             LastEvent = "Food_Clear";
         }
 
@@ -331,10 +426,32 @@ namespace RainWorldDesktopPet.Core
             InteractionState = FoodInteractionState.None;
         }
 
-        private static Vec2 MouthPosition(Slugcat slugcat, SlugcatGraphics graphics)
+        public static bool IsWithinOwnerRenderRange(DesktopFood food,
+            Vec2 ownerPosition)
+        {
+            if (food == null || !food.IsActive) return false;
+            double maximum = DesktopWorldTransform.ToSimulationLength(
+                MaximumOwnerDistancePixels);
+            return (food.Chunk.Position - ownerPosition).LengthSquared <=
+                maximum * maximum;
+        }
+
+        private static Vec2 FoodInteractionAnchor(Slugcat slugcat)
         {
             int facing = slugcat.State.Facing == 0 ? 1 : slugcat.State.Facing;
-            return graphics.Head.Position + new Vec2(facing * 5.0, 1.5);
+            Vec2 chest = slugcat.BodyChunks[0].Position;
+            Vec2 hips = slugcat.BodyChunks[1].Position;
+            Vec2 bodyAxis = chest - hips;
+            if (bodyAxis.LengthSquared < 0.000001) bodyAxis = Vec2.Up;
+            else bodyAxis = bodyAxis.Normalized;
+            return chest + bodyAxis * 7.0 + new Vec2(facing * 5.0, 1.5);
+        }
+
+        private static bool CanInteract(Slugcat slugcat)
+        {
+            return slugcat != null && !slugcat.IsGrabbed &&
+                slugcat.State.Conscious && !slugcat.State.Dead &&
+                slugcat.State.StunCounter <= 0;
         }
 
         private bool ConsiderFood(DesktopFood food)

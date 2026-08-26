@@ -233,7 +233,7 @@ namespace RainWorldDesktopPet.Core
             int steps = 0;
             while (steps < 3 && fixedTimeStep.ConsumeStep())
             {
-                Foods.StepPhysics(World);
+                Foods.StepPhysics(World, Slugcat.Center);
                 if (!Slugcat.State.Conscious || Slugcat.State.Dead ||
                     Slugcat.State.StunCounter > 0)
                 {
@@ -244,12 +244,17 @@ namespace RainWorldDesktopPet.Core
                 {
                     mouseAttention.Update(now, mouse.Position, mouse.ConsumeClick(), Graphics.Head.Position);
                 }
+                Vec2 foodAttentionTarget;
+                bool foodAttentionActive = Foods.TryGetAttentionTarget(Slugcat,
+                    out foodAttentionTarget);
                 VirtualInput input = Slugcat.IsGrabbed
                     ? VirtualInput.Neutral
-                    : AI.Step(Slugcat, World, mouse, mouseAttention);
+                    : AI.Step(Slugcat, World, mouse, mouseAttention,
+                        foodAttentionActive, AttentionKind.Food,
+                        foodAttentionTarget);
                 VirtualInput foodInput;
-                if (!Slugcat.IsGrabbed && Foods.TryProduceInput(Slugcat, Graphics,
-                    AI.Attention, out foodInput)) input = foodInput;
+                if (!Slugcat.IsGrabbed && Foods.TryProduceInput(Slugcat,
+                    out foodInput)) input = foodInput;
                 Slugcat.Step(input, World, mouse.Position, mouse.Velocity);
                 RecoverFromDesktopEscape();
                 if (!Slugcat.State.Conscious || Slugcat.State.Dead ||
@@ -261,7 +266,7 @@ namespace RainWorldDesktopPet.Core
                     AI.MouseAttentionActive && Slugcat.State.Conscious &&
                         !Slugcat.State.Dead && Slugcat.State.StunCounter < 1,
                     World);
-                Foods.StepInteraction(Slugcat, Graphics);
+                Foods.StepInteraction(Slugcat);
                 simulationTick++;
                 steps++;
             }

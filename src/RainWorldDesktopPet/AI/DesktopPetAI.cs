@@ -396,6 +396,14 @@ namespace RainWorldDesktopPet.AI
         public VirtualInput Step(Slugcat slugcat, DesktopCollisionWorld world, MouseTracker mouse,
             MouseAttentionState mouseAttention)
         {
+            return Step(slugcat, world, mouse, mouseAttention, false,
+                AttentionKind.RandomPoint, Vec2.Zero);
+        }
+
+        public VirtualInput Step(Slugcat slugcat, DesktopCollisionWorld world, MouseTracker mouse,
+            MouseAttentionState mouseAttention, bool attentionOverrideActive,
+            AttentionKind attentionOverrideKind, Vec2 attentionOverrideTarget)
+        {
             EnsureCharacterProfile(slugcat.SelectedSlugcat.Id);
 
             behaviorTicks++;
@@ -448,6 +456,8 @@ namespace RainWorldDesktopPet.AI
                 out abilityInput)) input = abilityInput;
 
             UpdateAttention(slugcat, mouse, context, mouseAttention);
+            if (attentionOverrideActive)
+                Attention.SetTarget(attentionOverrideKind, attentionOverrideTarget);
             Attention.Step();
             return input;
         }

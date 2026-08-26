@@ -41,6 +41,8 @@ namespace RainWorldDesktopPet.Physics
         // simulation units from the BodyChunk center.
         public const double EggBugEggVisualReach = 23.0;
         public const int DefaultLifetimeTicks = 1200;
+        public const double NormalEggHueMinimum = -0.15;
+        public const double NormalEggHueMaximum = 0.1;
 
         private const double Gravity = 0.9;
         private const double AirFriction = 0.999;
@@ -138,6 +140,48 @@ namespace RainWorldDesktopPet.Physics
         public void SetCreationVelocity(Vec2 velocity)
         {
             Chunk.Velocity = velocity;
+        }
+
+        // EggBug seeds this variation from EntityID in Rain World. The desktop
+        // has no abstract-object identity, so the owner supplies its stable RNG
+        // while the original constrained distribution remains part of the
+        // physical food model instead of the renderer.
+        public static double CreateNormalEggHue(Random random)
+        {
+            if (random == null) throw new ArgumentNullException("random");
+            double magnitudeSample = random.NextDouble();
+            double signedDeviation = magnitudeSample / (3.0 - magnitudeSample);
+            if (random.NextDouble() >= 0.5) signedDeviation = -signedDeviation;
+            double variation = MathUtil.Clamp01(0.5 + signedDeviation);
+            return MathUtil.Lerp(NormalEggHueMinimum, NormalEggHueMaximum,
+                variation);
+        }
+
+        public void Reposition(Vec2 position)
+        {
+            if (!IsPhysical) return;
+            Chunk.Position = position;
+            Chunk.LastPosition = position;
+            Chunk.Velocity = Vec2.Zero;
+            Chunk.ContactFloor = false;
+            Chunk.ContactLeft = false;
+            Chunk.ContactRight = false;
+            Chunk.SupportingSurfaceId = 0;
+            Chunk.SupportingSurfaceKind = DesktopSurfaceKind.ScreenEdge;
+            Chunk.WallSurfaceId = 0;
+            Chunk.WallSurfaceKind = DesktopSurfaceKind.ScreenEdge;
+            Chunk.PreviousContactFloor = false;
+            Chunk.PreviousContactLeft = false;
+            Chunk.PreviousContactRight = false;
+            Chunk.PreviousSupportingSurfaceId = 0;
+            Chunk.PreviousSupportingSurfaceKind = DesktopSurfaceKind.ScreenEdge;
+            Chunk.PreviousWallSurfaceId = 0;
+            Chunk.PreviousWallSurfaceKind = DesktopSurfaceKind.ScreenEdge;
+        }
+
+        public void Expire()
+        {
+            if (IsActive) State = DesktopFoodState.Expired;
         }
 
         public bool Claim()

@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using RainWorldDesktopPet.Core;
+using RainWorldDesktopPet.Physics;
 
 namespace RainWorldDesktopPet.Graphics
 {
@@ -25,8 +26,8 @@ namespace RainWorldDesktopPet.Graphics
     internal static class FoodRenderPalette
     {
         internal const double ReferenceDarkness = 0.4;
-        internal const double NormalEggHueMinimum = -0.15;
-        internal const double NormalEggHueMaximum = 0.1;
+        internal const double NormalEggHueMinimum = DesktopFood.NormalEggHueMinimum;
+        internal const double NormalEggHueMaximum = DesktopFood.NormalEggHueMaximum;
 
         private static readonly Color DesktopBlack =
             Color.FromArgb(255, 24, 20, 29);
@@ -49,13 +50,7 @@ namespace RainWorldDesktopPet.Graphics
         // produced when the entire hue wheel is sampled uniformly.
         internal static double CreateNormalEggHue(Random random)
         {
-            if (random == null) throw new ArgumentNullException("random");
-            double magnitudeSample = random.NextDouble();
-            double signedDeviation = magnitudeSample / (3.0 - magnitudeSample);
-            if (random.NextDouble() >= 0.5) signedDeviation = -signedDeviation;
-            double variation = MathUtil.Clamp01(0.5 + signedDeviation);
-            return MathUtil.Lerp(NormalEggHueMinimum, NormalEggHueMaximum,
-                variation);
+            return DesktopFood.CreateNormalEggHue(random);
         }
 
         internal static FoodLayerPalette EggBugEgg(double hue)

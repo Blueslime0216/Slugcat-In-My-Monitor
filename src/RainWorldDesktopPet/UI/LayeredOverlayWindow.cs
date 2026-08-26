@@ -317,13 +317,15 @@ namespace RainWorldDesktopPet.UI
                         int loopIndex = batch.SurfaceIndices[member];
                         GameLoop loop = gameLoops[loopIndex];
                         bool debug = loop.DebugEnabled && ReferenceEquals(loop, gameLoop);
-                        loop.Renderer.RenderFoods(graphics, loop.Foods, renderSpace,
+                        loop.Renderer.RenderFoods(graphics, loop.Foods,
+                            loop.Slugcat.Center, renderSpace,
                             poseBuffer[loopIndex].CharacterRenderScale,
                             poseBuffer[loopIndex].TimeStacker, false);
                         loop.Renderer.Render(graphics, poseBuffer[loopIndex], renderSpace, debug,
                             loop.World, loop.Slugcat, loop.AI, loop.AssetStatus,
                             loop.SelectedSlugcat);
-                        loop.Renderer.RenderFoods(graphics, loop.Foods, renderSpace,
+                        loop.Renderer.RenderFoods(graphics, loop.Foods,
+                            loop.Slugcat.Center, renderSpace,
                             poseBuffer[loopIndex].CharacterRenderScale,
                             poseBuffer[loopIndex].TimeStacker, true);
                     }
@@ -503,7 +505,8 @@ namespace RainWorldDesktopPet.UI
             for (int i = 0; i < loop.Foods.Foods.Count; i++)
             {
                 DesktopFood food = loop.Foods.Foods[i];
-                if (!food.IsActive) continue;
+                if (!DesktopFoodManager.IsWithinOwnerRenderRange(food,
+                    loop.Slugcat.Center)) continue;
                 Vec2 center = food.Chunk.RenderPosition(pose.TimeStacker) * scale;
                 double reach = food.VisualReach * scale;
                 content = RectangleF.Union(content, new RectangleF(
@@ -771,14 +774,15 @@ namespace RainWorldDesktopPet.UI
                 : T("먹이 주기 · 슬러그캣 ", "Feed · Slugcat ") + (selectedIndex + 1);
             feedDangleFruitItem.Enabled = gameLoop != null &&
                 activeFoods < MaximumFoods &&
-                gameLoop.Foods.Foods.Count < DesktopFoodManager.MaximumActiveFoods;
+                gameLoop.Foods.ActiveFoodCount < DesktopFoodManager.MaximumActiveFoods;
             feedEggBugEggItem.Enabled = feedDangleFruitItem.Enabled;
             fullnessStatusItem.Text = gameLoop == null
                 ? T("포만감 -", "Fullness -")
                 : T("포만감 ", "Fullness ") +
                     gameLoop.Foods.Fullness.ToString("0.0") + "/" +
                     DesktopFoodManager.MaximumFullness.ToString("0.0");
-            clearFoodsItem.Enabled = gameLoop != null && gameLoop.Foods.Foods.Count > 0;
+            clearFoodsItem.Enabled = gameLoop != null &&
+                gameLoop.Foods.ActiveFoodCount > 0;
         }
 
         private void FeedDangleFruit(object sender, EventArgs e)
@@ -794,12 +798,24 @@ namespace RainWorldDesktopPet.UI
         private void FeedFood(DesktopFoodKind kind)
         {
             if (gameLoop == null) return;
-            bool spawned = CountActiveFoods() < MaximumFoods &&
+            bool globalCapacityAvailable = CountActiveFoods() < MaximumFoods;
+            bool spawned = globalCapacityAvailable &&
                 (kind == DesktopFoodKind.EggBugEgg
                     ? gameLoop.FeedEggBugEgg()
                     : gameLoop.FeedDangleFruit());
             if (!spawned)
             {
+                if (globalCapacityAvailable &&
+                    gameLoop.Foods.LastSpawnResult ==
+                        DesktopFoodSpawnResult.PlacementUnavailable)
+                {
+                    trayIcon.ShowBalloonTip(2500,
+                        T("먹이를 놓을 자리가 없습니다", "No Reachable Food Placement"),
+                        T("슬러그캣이 수평 바닥이나 창 위에 있을 때 다시 시도해주세요.",
+                            "Try again while the Slugcat is on a horizontal floor or window top."),
+                        ToolTipIcon.Info);
+                    return;
+                }
                 trayIcon.ShowBalloonTip(2500,
                     T("먹이를 더 놓을 수 없습니다", "Food Limit Reached"),
                     T("화면에는 총 " + MaximumFoods + "개, 슬러그캣 한 마리에는 " +
@@ -827,7 +843,7 @@ namespace RainWorldDesktopPet.UI
         {
             int count = 0;
             for (int i = 0; i < gameLoops.Count; i++)
-                count += gameLoops[i].Foods.Foods.Count;
+                count += gameLoops[i].Foods.ActiveFoodCount;
             return count;
         }
 

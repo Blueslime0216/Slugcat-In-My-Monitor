@@ -93,6 +93,16 @@ namespace RainWorldDesktopPet.Tests
                 FoodInteractionUsesVirtualInputAndConsumes);
             Run("Food offers use a farther randomized drop distance",
                 FoodSpawnUsesFarRandomizedDrop);
+            Run("Food spawn uses the Slugcat's visible split surface segment",
+                FoodSpawnUsesSupportingSurfaceSegment);
+            Run("Food spawn distinguishes unavailable placement from capacity",
+                FoodSpawnReportsPlacementUnavailable);
+            Run("Inactive food stops consuming menu and owner capacity immediately",
+                InactiveFoodStopsConsumingCapacity);
+            Run("Food attention overrides autonomous attention in the same AI tick",
+                FoodAttentionOverridesInSameTick);
+            Run("Offscreen and distant food cannot strand capacity or composition bounds",
+                FoodRecoveryAndDistanceCapStayBounded);
             Run("Fullness prevents five consecutive guaranteed meals",
                 FullnessPreventsGuaranteedEating);
             Run("Each monitor contributes floor, taskbar, and exposed boundaries", MonitorTerrainTopologyIsExplicit);
@@ -424,7 +434,7 @@ namespace RainWorldDesktopPet.Tests
                     System.Drawing.Graphics.FromImage(bitmap))
                 {
                     drawing.Clear(Color.Transparent);
-                    renderer.RenderFoods(drawing, manager,
+                    renderer.RenderFoods(drawing, manager, new Vec2(110.0, 55.0),
                         new RenderSpace(new Rectangle(0, 0, bitmap.Width,
                             bitmap.Height)), 2.8, 1.0, false);
                 }
@@ -474,32 +484,33 @@ namespace RainWorldDesktopPet.Tests
         private static void FoodInteractionUsesVirtualInputAndConsumes()
         {
             Slugcat slugcat = new Slugcat(new Vec2(100.0, 100.0));
-            SlugcatGraphics graphics = new SlugcatGraphics(slugcat);
             DesktopFoodManager manager = new DesktopFoodManager();
-            AttentionSystem attention = new AttentionSystem();
             VirtualInput input;
 
             True(manager.TryAddDangleFruit(slugcat.Center + new Vec2(80.0, 0.0)),
                 "a fruit can be added to an empty manager");
-            True(manager.TryProduceInput(slugcat, graphics, attention, out input),
+            Vec2 attentionTarget;
+            True(manager.TryGetAttentionTarget(slugcat, out attentionTarget),
+                "food exposes its attention target before the AI tick");
+            True(manager.TryProduceInput(slugcat, out input),
                 "an available fruit overrides autonomous input");
             Equal(1, input.X, "the food controller walks toward the fruit");
             True(manager.Target.State == DesktopFoodState.Claimed,
                 "the selected fruit is reserved by its owning Slugcat");
-            True(attention.Kind == AttentionKind.Food,
-                "food becomes the visible attention target");
+            Near(manager.Target.Chunk.Position.X, attentionTarget.X, 0.000001,
+                "the exposed attention target is the selected food");
 
             manager.Clear();
             slugcat.State.Grounded = true;
             True(manager.TryAddDangleFruit(slugcat.Center + new Vec2(8.0, 0.0)),
                 "a reachable fruit can be added");
-            True(manager.TryProduceInput(slugcat, graphics, attention, out input),
+            True(manager.TryProduceInput(slugcat, out input),
                 "the reachable fruit owns the input tick");
             True(manager.Target.State == DesktopFoodState.Held,
                 "the Slugcat picks up a fruit inside reach");
 
             for (int tick = 0; tick < 80; tick++)
-                manager.StepInteraction(slugcat, graphics);
+                manager.StepInteraction(slugcat);
             Equal(3, manager.TotalBites, "the interaction performs all three bites");
             Equal(1, manager.FoodPointsEaten,
                 "the completed fruit grants its one original food point");
@@ -563,14 +574,12 @@ namespace RainWorldDesktopPet.Tests
         private static void FoodClearResetsInteractionState()
         {
             Slugcat slugcat = new Slugcat(new Vec2(100.0, 100.0));
-            SlugcatGraphics graphics = new SlugcatGraphics(slugcat);
             DesktopFoodManager manager = new DesktopFoodManager(1193);
-            AttentionSystem attention = new AttentionSystem();
             VirtualInput input;
             slugcat.State.Grounded = true;
             True(manager.TryAddDangleFruit(slugcat.Center + new Vec2(8.0, 0.0)),
                 "a fruit can be prepared for the clear-state test");
-            True(manager.TryProduceInput(slugcat, graphics, attention, out input),
+            True(manager.TryProduceInput(slugcat, out input),
                 "the fruit enters an interaction state");
             manager.Clear();
             Equal(0, manager.Foods.Count, "clear removes every food");
@@ -594,7 +603,7 @@ namespace RainWorldDesktopPet.Tests
                 manager.TryAddDangleFruit(new Vec2(45.0, 45.0));
                 manager.TryAddEggBugEgg(new Vec2(90.0, 45.0));
                 drawing.Clear(Color.Transparent);
-                renderer.RenderFoods(drawing, manager,
+                renderer.RenderFoods(drawing, manager, new Vec2(70.0, 45.0),
                     new RenderSpace(new Rectangle(0, 0, bitmap.Width,
                         bitmap.Height)), 2.0, 1.0, false);
                 int visiblePixels = 0;
@@ -746,9 +755,7 @@ namespace RainWorldDesktopPet.Tests
         {
             Slugcat slugcat = new Slugcat(new Vec2(100.0, 100.0));
             slugcat.State.Grounded = true;
-            SlugcatGraphics graphics = new SlugcatGraphics(slugcat);
             DesktopFoodManager manager = new DesktopFoodManager(9182);
-            AttentionSystem attention = new AttentionSystem();
             int accepted = 0;
             int ignored = 0;
 
@@ -758,7 +765,7 @@ namespace RainWorldDesktopPet.Tests
                 True(manager.TryAddDangleFruit(slugcat.Center + new Vec2(8.0, 0.0)),
                     "offer " + offer + " can be placed");
                 VirtualInput input;
-                if (!manager.TryProduceInput(slugcat, graphics, attention, out input))
+                if (!manager.TryProduceInput(slugcat, out input))
                 {
                     ignored++;
                     True(manager.Foods[0].State == DesktopFoodState.Ignored,
@@ -768,7 +775,7 @@ namespace RainWorldDesktopPet.Tests
 
                 accepted++;
                 for (int tick = 0; tick < 80; tick++)
-                    manager.StepInteraction(slugcat, graphics);
+                    manager.StepInteraction(slugcat);
             }
 
             True(accepted > 0 && accepted < 5 && ignored > 0,
@@ -780,6 +787,142 @@ namespace RainWorldDesktopPet.Tests
                 manager.StepMetabolism();
             Near(Math.Max(0.0, beforeDigestion - 1.0), manager.Fullness, 0.001,
                 "one food point digests over the configured interval");
+        }
+
+        private static void FoodSpawnUsesSupportingSurfaceSegment()
+        {
+            MonitorInfo monitor = new MonitorInfo("SPLIT-FOOD-MONITOR",
+                new Rectangle(0, 0, 1200, 900),
+                new Rectangle(0, 0, 1200, 860), true);
+            DesktopWindowSnapshot occluder = Window(7201,
+                new Rectangle(400, 250, 120, 250));
+            DesktopWindowSnapshot supporting = Window(7202,
+                new Rectangle(200, 300, 700, 200));
+            DesktopCollisionWorld world = CreateSyntheticWorld(
+                new[] { monitor }, new[] { occluder, supporting });
+            int visibleSegments = 0;
+            for (int i = 0; i < world.Surfaces.Count; i++)
+                if (world.Surfaces[i].Id == supporting.Handle.ToInt64() &&
+                    world.Surfaces[i].Kind == DesktopSurfaceKind.WindowTop)
+                    visibleSegments++;
+            Equal(2, visibleSegments,
+                "the supporting top is split into two visible segments");
+
+            Vec2 supportPoint = DesktopWorldTransform.ToSimulation(
+                new Vec2(700.0, supporting.Bounds.Top - 9.0));
+            Slugcat slugcat = new Slugcat(supportPoint);
+            slugcat.BodyChunks[1].Position = supportPoint;
+            slugcat.BodyChunks[1].LastPosition = supportPoint;
+            slugcat.BodyChunks[1].SupportingSurfaceId = supporting.Handle.ToInt64();
+            slugcat.BodyChunks[1].SupportingSurfaceKind =
+                DesktopSurfaceKind.WindowTop;
+            DesktopFoodManager manager = new DesktopFoodManager(7203);
+            True(manager.TrySpawnDangleFruit(slugcat, world),
+                "food can spawn on the occupied visible segment");
+            double desktopX = DesktopWorldTransform.ToDesktop(
+                manager.Foods[0].Chunk.Position).X;
+            True(desktopX > occluder.Bounds.Right &&
+                desktopX < supporting.Bounds.Right,
+                "spawn stays on the same right-hand segment as the Slugcat: " +
+                desktopX.ToString("0.###"));
+        }
+
+        private static void FoodSpawnReportsPlacementUnavailable()
+        {
+            MonitorInfo monitor = new MonitorInfo("WALL-FOOD-MONITOR",
+                new Rectangle(0, 0, 1200, 900),
+                new Rectangle(0, 0, 1200, 860), true);
+            DesktopWindowSnapshot window = Window(7301,
+                new Rectangle(300, 260, 300, 300));
+            DesktopCollisionWorld world = CreateSyntheticWorld(
+                new[] { monitor }, new[] { window });
+            Vec2 wallPoint = DesktopWorldTransform.ToSimulation(
+                new Vec2(window.Bounds.Left - 9.0, 400.0));
+            Slugcat slugcat = new Slugcat(wallPoint);
+            slugcat.BodyChunks[1].Position = wallPoint;
+            slugcat.BodyChunks[1].LastPosition = wallPoint;
+            slugcat.BodyChunks[1].WallSurfaceId = window.Handle.ToInt64();
+            slugcat.BodyChunks[1].WallSurfaceKind =
+                DesktopSurfaceKind.WindowLeftWall;
+            DesktopFoodManager manager = new DesktopFoodManager(7302);
+            True(!manager.TrySpawnDangleFruit(slugcat, world),
+                "horizontal-only locomotion refuses an unreachable wall placement");
+            True(manager.LastSpawnResult ==
+                DesktopFoodSpawnResult.PlacementUnavailable,
+                "the caller receives a placement-specific failure reason");
+            Equal(0, manager.ActiveFoodCount,
+                "failed placement does not consume owner capacity");
+        }
+
+        private static void InactiveFoodStopsConsumingCapacity()
+        {
+            DesktopFoodManager manager = new DesktopFoodManager(7401);
+            True(manager.TryAddDangleFruit(new Vec2(100.0, 100.0)),
+                "food can be inserted for lifecycle testing");
+            DesktopFood food = manager.Foods[0];
+            True(food.Claim() && food.PickUp(food.Chunk.Position) &&
+                food.BeginBiting(), "food enters the consuming state");
+            True(food.Bite() && food.Bite() && food.Bite(),
+                "all fruit bites complete");
+            Equal(1, manager.Foods.Count,
+                "the raw list still contains the item before the next physics tick");
+            Equal(0, manager.ActiveFoodCount,
+                "inactive food is excluded from capacity immediately");
+            True(manager.TryAddEggBugEgg(new Vec2(120.0, 100.0)),
+                "the next add prunes the inactive item and succeeds");
+        }
+
+        private static void FoodAttentionOverridesInSameTick()
+        {
+            MonitorInfo monitor = new MonitorInfo("ATTENTION-FOOD-MONITOR",
+                new Rectangle(0, 0, 1600, 900),
+                new Rectangle(0, 0, 1600, 860), true);
+            DesktopCollisionWorld world = CreateSyntheticWorld(
+                new[] { monitor }, new DesktopWindowSnapshot[0]);
+            Slugcat slugcat = new Slugcat(new Vec2(100.0, 100.0));
+            DesktopPetAI ai = new DesktopPetAI(7501);
+            MouseTracker mouse = new MouseTracker();
+            ai.Step(slugcat, world, mouse);
+            Vec2 before = ai.Attention.Smoothed;
+            Vec2 foodTarget = new Vec2(500.0, 180.0);
+            ai.Step(slugcat, world, mouse, null, true, AttentionKind.Food,
+                foodTarget);
+            True(ai.Attention.Kind == AttentionKind.Food,
+                "food wins after autonomous attention selection");
+            Near(foodTarget.X, ai.Attention.Target.X, 0.000001,
+                "the current tick exposes the food target");
+            True((ai.Attention.Smoothed - foodTarget).Length <
+                (before - foodTarget).Length,
+                "attention smoothing advances toward food without a one-tick delay");
+        }
+
+        private static void FoodRecoveryAndDistanceCapStayBounded()
+        {
+            MonitorInfo monitor = new MonitorInfo("RECOVERY-FOOD-MONITOR",
+                new Rectangle(0, 0, 1920, 1080),
+                new Rectangle(0, 0, 1920, 1040), true);
+            DesktopCollisionWorld world = CreateSyntheticWorld(
+                new[] { monitor }, new DesktopWindowSnapshot[0]);
+            Vec2 owner = DesktopWorldTransform.ToSimulation(new Vec2(960.0, 900.0));
+            DesktopFoodManager manager = new DesktopFoodManager(7601);
+            manager.TryAddEggBugEgg(DesktopWorldTransform.ToSimulation(
+                new Vec2(9000.0, 5000.0)));
+            manager.StepPhysics(world, owner);
+            Equal(1, manager.ActiveFoodCount,
+                "a topology-stranded food is recovered instead of reserving hidden capacity");
+            True(DesktopRecovery.IsNearAnyMonitor(manager.Foods[0].Chunk.Position,
+                world.CurrentSnapshot.Monitors),
+                "recovered food returns to a visible monitor");
+            True(DesktopFoodManager.IsWithinOwnerRenderRange(manager.Foods[0], owner),
+                "recovered food remains inside the bounded owner composition range");
+
+            DesktopFoodManager distant = new DesktopFoodManager(7602);
+            distant.TryAddDangleFruit(owner + new Vec2(
+                DesktopWorldTransform.ToSimulationLength(
+                    DesktopFoodManager.MaximumOwnerDistancePixels + 10.0), 0.0));
+            distant.StepPhysics(world, owner);
+            Equal(0, distant.ActiveFoodCount,
+                "food beyond the render cap expires before expanding composition bounds");
         }
 
         private static void FixedStepUsesFortyHertz()
