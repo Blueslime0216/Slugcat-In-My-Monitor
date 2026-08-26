@@ -254,6 +254,7 @@ Core는 이제 Slugcat의 두 `BodyChunk`만으로 음식 상호작용 anchor를
 - `96d9b85` — 신규 4종 구현 revert
 - `f8fd5d5` — `fix: stabilize two-food desktop interactions`
 - `d6e9b13` — 최신 `upstream/develop` 통합
+- `b0c0cf5` — `fix: harden desktop food interactions`
 
 각 커밋은 `origin/feature/food-update`에 순차적으로 push했다.
 
